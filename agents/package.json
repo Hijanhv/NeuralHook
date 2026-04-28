@@ -1,0 +1,22 @@
+{
+  "name": "neuralhook-agents",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "agent:0": "NODE_ID=0 PORT=4000 tsx src/agent.ts",
+    "agent:1": "NODE_ID=1 PORT=4001 tsx src/agent.ts",
+    "agent:2": "NODE_ID=2 PORT=4002 tsx src/agent.ts",
+    "start": "concurrently \"npm run agent:0\" \"npm run agent:1\" \"npm run agent:2\""
+  },
+  "dependencies": {
+    "ethers": "^6.13.4",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

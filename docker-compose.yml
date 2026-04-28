@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  agent-0:
+    build: ./agents
+    environment:
+      NODE_ID: "0"
+      PORT: "4000"
+      AGENT_0: "http://agent-0:4000"
+      AGENT_1: "http://agent-1:4001"
+      AGENT_2: "http://agent-2:4002"
+      ORACLE_PRIVATE_KEY: "${ORACLE_PRIVATE_KEY}"
+      HOOK_ADDRESS: "${HOOK_ADDRESS}"
+      RPC_URL: "${RPC_URL}"
+      CHAIN_ID: "1301"
+    ports: ["4000:4000"]
+
+  agent-1:
+    build: ./agents
+    environment:
+      NODE_ID: "1"
+      PORT: "4001"
+      AGENT_0: "http://agent-0:4000"
+      AGENT_1: "http://agent-1:4001"
+      AGENT_2: "http://agent-2:4002"
+      ORACLE_PRIVATE_KEY: "${ORACLE_PRIVATE_KEY}"
+      HOOK_ADDRESS: "${HOOK_ADDRESS}"
+      RPC_URL: "${RPC_URL}"
+      CHAIN_ID: "1301"
+    ports: ["4001:4001"]
+
+  agent-2:
+    build: ./agents
+    environment:
+      NODE_ID: "2"
+      PORT: "4002"
+      AGENT_0: "http://agent-0:4000"
+      AGENT_1: "http://agent-1:4001"
+      AGENT_2: "http://agent-2:4002"
+      ORACLE_PRIVATE_KEY: "${ORACLE_PRIVATE_KEY}"
+      HOOK_ADDRESS: "${HOOK_ADDRESS}"
+      RPC_URL: "${RPC_URL}"
+      CHAIN_ID: "1301"
+    ports: ["4002:4002"]
+
+  frontend:
+    build: ./frontend
+    ports: ["3001:3001"]
+    environment:
+      NEXT_PUBLIC_AGENT_0: "http://localhost:4000"
+      NEXT_PUBLIC_AGENT_1: "http://localhost:4001"
+      NEXT_PUBLIC_AGENT_2: "http://localhost:4002"

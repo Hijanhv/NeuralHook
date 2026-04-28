@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+agents/node_modules/
+frontend/node_modules/
+
+# Build outputs
+frontend/.next/
+frontend/out/
+contracts/out/
+contracts/cache/
+
+# Environment
+.env
+.env.local
+
+# Misc
+.DS_Store
+*.tsbuildinfo
+contracts/lib/
