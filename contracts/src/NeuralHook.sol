@@ -29,39 +29,68 @@ contract NeuralHook is IHooks {
     uint8 public constant RISK_HIGH     = 2;
     uint8 public constant RISK_CRITICAL = 3;
 
-    IPoolManager     public immutable poolManager;
-    ILInsuranceFund  public immutable insuranceFund;
-    address          public immutable trustedOracle;
-    uint256          public immutable deployedChainId;
+    IPoolManager    public immutable poolManager;
+    ILInsuranceFund public immutable insuranceFund;
+    uint256         public immutable deployedChainId;
+
+    address public owner;
+    address public trustedOracle;
+    bool    public paused;
 
     uint24  public currentFee  = FEE_LOW;
     uint8   public currentRisk = RISK_LOW;
     uint256 public lastUpdateTimestamp;
 
-    uint256 public constant MAX_STALENESS = 60; // seconds
+    uint256 public constant MAX_STALENESS = 60;
 
-    // Entry prices for IL tracking (poolId => sqrtPriceX96 at add-liquidity time)
     mapping(bytes32 => uint160) public entryPrices;
 
     error OnlyPoolManager();
+    error OnlyOwner();
     error InvalidSignature();
     error StaleInference();
     error InvalidFee();
+    error ContractPaused();
 
     event InferenceUpdated(uint8 ilRisk, uint24 fee, bool rebalanceSignal, uint256 timestamp);
     event LiquidityAdded(bytes32 indexed poolId, uint160 sqrtPriceX96);
     event LiquidityRemoved(bytes32 indexed poolId, uint256 ilBps);
+    event OracleUpdated(address indexed newOracle);
+    event Paused(bool paused);
 
     modifier onlyPoolManager() {
         if (msg.sender != address(poolManager)) revert OnlyPoolManager();
         _;
     }
 
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert OnlyOwner();
+        _;
+    }
+
+    modifier whenNotPaused() {
+        if (paused) revert ContractPaused();
+        _;
+    }
+
     constructor(address _poolManager, address _oracle, address payable _insuranceFund) {
-        poolManager    = IPoolManager(_poolManager);
-        trustedOracle  = _oracle;
-        insuranceFund  = ILInsuranceFund(_insuranceFund);
+        poolManager     = IPoolManager(_poolManager);
+        trustedOracle   = _oracle;
+        insuranceFund   = ILInsuranceFund(_insuranceFund);
         deployedChainId = block.chainid;
+        owner           = msg.sender;
+    }
+
+    // ── Admin ─────────────────────────────────────────────────────────────────
+
+    function setOracle(address _oracle) external onlyOwner {
+        trustedOracle = _oracle;
+        emit OracleUpdated(_oracle);
+    }
+
+    function setPaused(bool _paused) external onlyOwner {
+        paused = _paused;
+        emit Paused(_paused);
     }
 
     // ── Oracle submission ─────────────────────────────────────────────────────
@@ -75,7 +104,7 @@ contract NeuralHook is IHooks {
         uint8   yieldScore,
         uint256 timestamp,
         bytes calldata signature
-    ) external {
+    ) external whenNotPaused {
         if (block.timestamp > timestamp + MAX_STALENESS) revert StaleInference();
         if (recommendedFee > LPFeeLibrary.MAX_LP_FEE)    revert InvalidFee();
 
@@ -88,9 +117,9 @@ contract NeuralHook is IHooks {
         (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(ethSigned, signature);
         if (err != ECDSA.RecoverError.NoError || recovered != trustedOracle) revert InvalidSignature();
 
-        currentRisk          = ilRisk;
-        currentFee           = recommendedFee;
-        lastUpdateTimestamp  = timestamp;
+        currentRisk         = ilRisk;
+        currentFee          = recommendedFee;
+        lastUpdateTimestamp = timestamp;
 
         emit InferenceUpdated(ilRisk, recommendedFee, rebalanceSignal, timestamp);
     }
@@ -114,9 +143,7 @@ contract NeuralHook is IHooks {
     // ── IHooks implementation ─────────────────────────────────────────────────
 
     function beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
-        external
-        override
-        onlyPoolManager
+        external override onlyPoolManager
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         uint24 feeOverride = currentFee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
@@ -124,18 +151,14 @@ contract NeuralHook is IHooks {
     }
 
     function afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
-        external
-        override
-        onlyPoolManager
+        external override onlyPoolManager
         returns (bytes4, int128)
     {
         return (IHooks.afterSwap.selector, 0);
     }
 
     function beforeAddLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
-        external
-        override
-        onlyPoolManager
+        external override onlyPoolManager
         returns (bytes4)
     {
         PoolId poolId = key.toId();
@@ -149,27 +172,21 @@ contract NeuralHook is IHooks {
     }
 
     function afterAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, BalanceDelta, BalanceDelta, bytes calldata)
-        external
-        override
-        onlyPoolManager
+        external override onlyPoolManager
         returns (bytes4, BalanceDelta)
     {
         return (IHooks.afterAddLiquidity.selector, BalanceDelta.wrap(0));
     }
 
     function beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
-        external
-        override
-        onlyPoolManager
+        external override onlyPoolManager
         returns (bytes4)
     {
         return IHooks.beforeRemoveLiquidity.selector;
     }
 
     function afterRemoveLiquidity(address lp, PoolKey calldata key, ModifyLiquidityParams calldata, BalanceDelta, BalanceDelta, bytes calldata)
-        external
-        override
-        onlyPoolManager
+        external override onlyPoolManager
         returns (bytes4, BalanceDelta)
     {
         PoolId poolId = key.toId();
@@ -180,15 +197,12 @@ contract NeuralHook is IHooks {
             uint256 ilBps = computeIL(entry, exitPrice);
             emit LiquidityRemoved(pid, ilBps);
             if (ilBps > 100) {
-                // Attempt insurance payout; ignore if fund is empty
                 try insuranceFund.claim(payable(lp), ilBps, 1 ether) {} catch {}
             }
             delete entryPrices[pid];
         }
         return (IHooks.afterRemoveLiquidity.selector, BalanceDelta.wrap(0));
     }
-
-    // ── Unimplemented optional hooks ──────────────────────────────────────────
 
     function beforeInitialize(address, PoolKey calldata, uint160) external override onlyPoolManager returns (bytes4) {
         return IHooks.beforeInitialize.selector;

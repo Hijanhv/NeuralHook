@@ -35,8 +35,8 @@ contract NeuralHookTest is Test {
         oracleAddr = vm.addr(ORACLE_PK);
         poolManager = new PoolManager(address(this));
 
-        // Deploy fund first so we can use its address in the hook constructor args
-        fund = new ILInsuranceFund(address(0)); // hook addr unknown yet; tests don't call claim() directly
+        // Deploy fund owned by test contract; setHook called after hook is deployed
+        fund = new ILInsuranceFund(address(this));
 
         // Mine CREATE2 salt with the real constructor args
         bytes memory args = abi.encode(address(poolManager), oracleAddr, address(fund));
@@ -51,6 +51,7 @@ contract NeuralHookTest is Test {
             hookAddr := create2(0, add(initCode, 0x20), mload(initCode), salt)
         }
         hook = NeuralHook(hookAddr);
+        fund.setHook(hookAddr);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -174,5 +175,29 @@ contract NeuralHookTest is Test {
         vm.prank(address(0x1234));
         vm.expectRevert(NeuralHook.OnlyPoolManager.selector);
         hook.beforeSwap(address(this), key, SwapParams({zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: 0}), "");
+    }
+
+    function test_OwnerCanUpdateOracle() public {
+        address newOracle = address(0xABCD);
+        // hook owner is tx.origin which in tests is address(this)
+        hook.setOracle(newOracle);
+        assertEq(hook.trustedOracle(), newOracle);
+    }
+
+    function test_NonOwnerCannotUpdateOracle() public {
+        vm.prank(address(0x9999));
+        vm.expectRevert(NeuralHook.OnlyOwner.selector);
+        hook.setOracle(address(0xABCD));
+    }
+
+    function test_PausedHookRejectsSubmission() public {
+        hook.setPaused(true);
+        uint256 ts = block.timestamp;
+        bytes32 rh = keccak256("paused");
+        uint24 fee = hook.FEE_LOW();
+        bytes memory sig = _sign(rh, 0, 0, fee, false, 50, ts);
+
+        vm.expectRevert(NeuralHook.ContractPaused.selector);
+        hook.submitConsensusResult(rh, 0, 0, fee, false, 50, ts, sig);
     }
 }

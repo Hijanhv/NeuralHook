@@ -6,11 +6,13 @@ import {ILInsuranceFund} from "../src/ILInsuranceFund.sol";
 
 contract ILInsuranceFundTest is Test {
     ILInsuranceFund fund;
-    address hook = address(0xBEEF);
-    address lp   = address(0xCAFE);
+    address owner = address(this);
+    address hook  = address(0xBEEF);
+    address lp    = address(0xCAFE);
 
     function setUp() public {
-        fund = new ILInsuranceFund(hook);
+        fund = new ILInsuranceFund(owner);
+        fund.setHook(hook);
     }
 
     function test_AcceptsETHDeposits() public {
@@ -59,5 +61,32 @@ contract ILInsuranceFundTest is Test {
     function test_BalanceViewFunction() public {
         vm.deal(address(fund), 5 ether);
         assertEq(fund.balance(), 5 ether);
+    }
+
+    function test_SetHookCanOnlyBeCalledOnce() public {
+        // Already set in setUp — calling again should revert
+        vm.expectRevert(ILInsuranceFund.HookAlreadySet.selector);
+        fund.setHook(address(0x1234));
+    }
+
+    function test_OnlyOwnerCanSetHook() public {
+        ILInsuranceFund fresh = new ILInsuranceFund(owner);
+        vm.prank(address(0x9999));
+        vm.expectRevert(ILInsuranceFund.OnlyOwner.selector);
+        fresh.setHook(hook);
+    }
+
+    function test_PausePreventsClaimsButNotDeposits() public {
+        vm.deal(address(fund), 2 ether);
+        fund.setPaused(true);
+
+        // Deposits still work
+        (bool ok,) = address(fund).call{value: 1 ether}("");
+        assertTrue(ok);
+
+        // Claims revert
+        vm.prank(hook);
+        vm.expectRevert(ILInsuranceFund.ContractPaused.selector);
+        fund.claim(payable(lp), 500, 1 ether);
     }
 }

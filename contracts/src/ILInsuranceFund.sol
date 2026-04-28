@@ -2,20 +2,32 @@
 pragma solidity ^0.8.26;
 
 contract ILInsuranceFund {
-    address public immutable hook;
+    address public owner;
+    address public hook;
     uint256 public totalDeposited;
     uint256 public totalClaimed;
     uint256 public claimCount;
+    bool    public paused;
 
     event Deposited(address indexed from, uint256 amount);
     event Claimed(address indexed lp, uint256 amount, uint256 ilBps);
+    event HookSet(address indexed hook);
+    event Paused(bool paused);
 
     error OnlyHook();
+    error OnlyOwner();
     error InsufficientFunds();
     error ZeroPayout();
+    error ContractPaused();
+    error HookAlreadySet();
 
-    constructor(address _hook) {
-        hook = _hook;
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert OnlyOwner();
+        _;
+    }
+
+    constructor(address _owner) {
+        owner = _owner;
     }
 
     receive() external payable {
@@ -23,14 +35,27 @@ contract ILInsuranceFund {
         emit Deposited(msg.sender, msg.value);
     }
 
-    function claim(address payable lp, uint256 ilBps, uint256 positionValue) external {
-        if (msg.sender != hook) revert OnlyHook();
-        uint256 bal = address(this).balance;
-        if (bal == 0) revert InsufficientFunds();
+    // Called once after hook is deployed to link the two contracts
+    function setHook(address _hook) external onlyOwner {
+        if (hook != address(0)) revert HookAlreadySet();
+        hook = _hook;
+        emit HookSet(_hook);
+    }
 
-        uint256 halfIL = (positionValue * ilBps) / 20000; // half of IL expressed in ETH
-        uint256 cap    = bal / 10;                        // 10% drain protection
-        uint256 payout  = halfIL < cap ? halfIL : cap;
+    function setPaused(bool _paused) external onlyOwner {
+        paused = _paused;
+        emit Paused(_paused);
+    }
+
+    function claim(address payable lp, uint256 ilBps, uint256 positionValue) external {
+        if (msg.sender != hook)  revert OnlyHook();
+        if (paused)              revert ContractPaused();
+        uint256 bal = address(this).balance;
+        if (bal == 0)            revert InsufficientFunds();
+
+        uint256 halfIL = (positionValue * ilBps) / 20000;
+        uint256 cap    = bal / 10;
+        uint256 payout = halfIL < cap ? halfIL : cap;
         if (payout == 0) revert ZeroPayout();
 
         totalClaimed += payout;
@@ -41,5 +66,10 @@ contract ILInsuranceFund {
 
     function balance() external view returns (uint256) {
         return address(this).balance;
+    }
+
+    // Owner can rescue ETH if needed
+    function withdraw(uint256 amount) external onlyOwner {
+        payable(owner).transfer(amount);
     }
 }
