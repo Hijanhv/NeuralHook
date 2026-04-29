@@ -3,9 +3,8 @@ pragma solidity ^0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
 import {PoolManager}   from "v4-core/src/PoolManager.sol";
-import {IPoolManager}  from "v4-core/src/interfaces/IPoolManager.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks}        from "v4-core/src/interfaces/IHooks.sol";
-import {SwapParams}    from "v4-core/src/types/PoolOperation.sol";
 import {PoolKey}       from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency}      from "v4-core/src/types/Currency.sol";
@@ -174,7 +173,7 @@ contract NeuralHookTest is Test {
 
         vm.prank(address(0x1234));
         vm.expectRevert(NeuralHook.OnlyPoolManager.selector);
-        hook.beforeSwap(address(this), key, SwapParams({zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: 0}), "");
+        hook.beforeSwap(address(this), key, IPoolManager.SwapParams({zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: 0}), "");
     }
 
     function test_OwnerCanUpdateOracle() public {
