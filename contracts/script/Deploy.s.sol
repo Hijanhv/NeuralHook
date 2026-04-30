@@ -13,6 +13,9 @@ import {HookMiner}    from "../src/HookMiner.sol";
 
 address constant POOL_MANAGER = 0x00B036B58a818B1BC34d502D3fE730Db729e62AC;
 
+// Nick's deterministic deployer — forge broadcast routes raw create2 through this
+address constant NICK_FACTORY = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+
 uint160 constant FLAGS =
     (1 << 7) |   // BEFORE_SWAP
     (1 << 6) |   // AFTER_SWAP
@@ -31,25 +34,25 @@ contract DeployScript is Script {
         ILInsuranceFund fund = new ILInsuranceFund(deployer);
         console.log("ILInsuranceFund:", address(fund));
 
-        // 2. Mine CREATE2 salt — args must include real fund address
+        // 2. Mine CREATE2 salt — mine against NICK_FACTORY (actual on-chain sender)
         bytes memory args = abi.encode(POOL_MANAGER, oracle, address(fund));
-        (address hookAddr, bytes32 salt) = HookMiner.find(deployer, FLAGS, type(NeuralHook).creationCode, args);
+        (address hookAddr, bytes32 salt) = HookMiner.find(NICK_FACTORY, FLAGS, type(NeuralHook).creationCode, args);
         console.log("Hook address (mined):", hookAddr);
 
-        // 3. Deploy hook via CREATE2
+        // 3. Deploy hook via Nick's factory (calldata = salt ++ initcode)
         bytes memory initCode = abi.encodePacked(type(NeuralHook).creationCode, args);
-        address deployed;
-        assembly { deployed := create2(0, add(initCode, 0x20), mload(initCode), salt) }
-        require(deployed == hookAddr, "CREATE2: address mismatch");
-        console.log("NeuralHook deployed:", deployed);
+        (bool ok,) = NICK_FACTORY.call(abi.encodePacked(salt, initCode));
+        require(ok, "CREATE2 deploy failed");
+        require(hookAddr.code.length > 0, "hook not at expected address");
+        console.log("NeuralHook deployed:", hookAddr);
 
         // 4. Wire the fund to the hook (one-time, locked after this call)
-        fund.setHook(deployed);
+        fund.setHook(hookAddr);
         console.log("Fund wired to hook");
 
         // 5. Seed insurance fund with 0.01 ETH
-        (bool ok,) = address(fund).call{value: 0.01 ether}("");
-        require(ok, "fund seed failed");
+        (bool seedOk,) = address(fund).call{value: 0.01 ether}("");
+        require(seedOk, "fund seed failed");
         console.log("Fund seeded: 0.01 ETH");
 
         // 6. Initialize pool — ETH/USDC on Unichain Sepolia with dynamic fee
@@ -58,7 +61,7 @@ contract DeployScript is Script {
             currency1:   Currency.wrap(0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238),
             fee:         LPFeeLibrary.DYNAMIC_FEE_FLAG,
             tickSpacing: 60,
-            hooks:       IHooks(deployed)
+            hooks:       IHooks(hookAddr)
         });
         uint160 sqrtPriceX96 = 1771595571142957166519155961327389600; // ≈ 1800 USDC/ETH
         IPoolManager(POOL_MANAGER).initialize(key, sqrtPriceX96);
@@ -68,7 +71,7 @@ contract DeployScript is Script {
 
         // Print addresses for .env
         console.log("\n=== Copy these to .env ===");
-        console.log("HOOK_ADDRESS=%s", deployed);
+        console.log("HOOK_ADDRESS=%s", hookAddr);
         console.log("FUND_ADDRESS=%s", address(fund));
     }
 }
