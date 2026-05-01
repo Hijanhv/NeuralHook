@@ -9,6 +9,8 @@ frontend/out/
 contracts/out/
 contracts/cache/
 
+contracts/broadcast/*
+
 # Environment
 .env
 .env.local

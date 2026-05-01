@@ -15,7 +15,7 @@ export const wagmiConfig = createConfig({
   chains: [unichainSepolia],
   connectors: [
     injected(),
-    walletConnect({ projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? 'demo' }),
+    walletConnect({ projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? '914c87ce0f063cd8ac455779a1271f13' }), //project ID
   ],
   transports: { [unichainSepolia.id]: http() },
 })

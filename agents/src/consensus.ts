@@ -20,11 +20,13 @@ export function tryConsensus(votes: Vote[]): ConsensusResult | null {
   for (const risk of risks) {
     const agreeing = counts[risk] ?? []
     if (agreeing.length >= THRESHOLD) {
-      // Pick the fastest agent's signature
-      const fastest = agreeing.reduce((a, b) => a.latencyMs < b.latencyMs ? a : b)
+      // Pick signer deterministically (lexicographically smallest agentId).
+      // All agents must agree on the same signer regardless of vote arrival order,
+      // otherwise multiple agents submit with the shared wallet and collide on nonce.
+      const signer = agreeing.reduce((a, b) => a.agentId < b.agentId ? a : b)
       return {
-        ...fastest.result,
-        signerAgentId:  fastest.agentId,
+        ...signer.result,
+        signerAgentId:  signer.agentId,
         agreementCount: agreeing.length,
       }
     }

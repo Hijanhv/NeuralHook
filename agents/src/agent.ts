@@ -49,7 +49,12 @@ async function runLoop(): Promise<void> {
       history.push(consensus)
       if (history.length > 100) history.shift()
       votes.clear()
-      await triggerRebalance(consensus).catch(() => {})
+      // Only NODE_ID 0 submits to chain. All agents share one wallet, so allowing
+      // multiple submitters causes nonce collisions. signerAgentId could disagree
+      // across agents during gossip windows, so we hardcode the submitter here.
+      if (NODE_ID === '0') {
+        await triggerRebalance(consensus).catch(() => {})
+      }
     }
   } catch (e) {
     console.error(`[agent-${NODE_ID}] inference error:`, e)

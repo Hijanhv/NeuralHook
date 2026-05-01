@@ -2,12 +2,11 @@
 pragma solidity ^0.8.26;
 
 import {IHooks}              from "v4-core/src/interfaces/IHooks.sol";
-import {IPoolManager}        from "v4-core/src/interfaces/IPoolManager.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey}             from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {BalanceDelta}        from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
-import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 import {LPFeeLibrary}        from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary}        from "v4-core/src/libraries/StateLibrary.sol";
 import {ECDSA}               from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -41,7 +40,7 @@ contract NeuralHook is IHooks {
     uint8   public currentRisk = RISK_LOW;
     uint256 public lastUpdateTimestamp;
 
-    uint256 public constant MAX_STALENESS = 60;
+    uint256 public constant MAX_STALENESS = 600;
 
     mapping(bytes32 => uint160) public entryPrices;
 
@@ -142,7 +141,7 @@ contract NeuralHook is IHooks {
 
     // ── IHooks implementation ─────────────────────────────────────────────────
 
-    function beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
+    function beforeSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata)
         external override onlyPoolManager
         returns (bytes4, BeforeSwapDelta, uint24)
     {
@@ -150,14 +149,14 @@ contract NeuralHook is IHooks {
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feeOverride);
     }
 
-    function afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
+    function afterSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, BalanceDelta, bytes calldata)
         external override onlyPoolManager
         returns (bytes4, int128)
     {
         return (IHooks.afterSwap.selector, 0);
     }
 
-    function beforeAddLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
+    function beforeAddLiquidity(address, PoolKey calldata key, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
         external override onlyPoolManager
         returns (bytes4)
     {
@@ -171,21 +170,21 @@ contract NeuralHook is IHooks {
         return IHooks.beforeAddLiquidity.selector;
     }
 
-    function afterAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, BalanceDelta, BalanceDelta, bytes calldata)
+    function afterAddLiquidity(address, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, BalanceDelta, BalanceDelta, bytes calldata)
         external override onlyPoolManager
         returns (bytes4, BalanceDelta)
     {
         return (IHooks.afterAddLiquidity.selector, BalanceDelta.wrap(0));
     }
 
-    function beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
+    function beforeRemoveLiquidity(address, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
         external override onlyPoolManager
         returns (bytes4)
     {
         return IHooks.beforeRemoveLiquidity.selector;
     }
 
-    function afterRemoveLiquidity(address lp, PoolKey calldata key, ModifyLiquidityParams calldata, BalanceDelta, BalanceDelta, bytes calldata)
+    function afterRemoveLiquidity(address lp, PoolKey calldata key, IPoolManager.ModifyLiquidityParams calldata, BalanceDelta, BalanceDelta, bytes calldata)
         external override onlyPoolManager
         returns (bytes4, BalanceDelta)
     {
