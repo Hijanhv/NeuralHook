@@ -3,14 +3,23 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "agent:0": "NODE_ID=0 PORT=4000 tsx src/agent.ts",
-    "agent:1": "NODE_ID=1 PORT=4001 tsx src/agent.ts",
-    "agent:2": "NODE_ID=2 PORT=4002 tsx src/agent.ts",
-    "start": "concurrently \"npm run agent:0\" \"npm run agent:1\" \"npm run agent:2\""
+    "agent:0": "NODE_ID=0 PORT=4000 tsx --import=./src/env.js src/agent.ts",
+    "agent:1": "NODE_ID=1 PORT=4001 tsx --import=./src/env.js src/agent.ts",
+    "agent:2": "NODE_ID=2 PORT=4002 tsx --import=./src/env.js src/agent.ts",
+    "start": "concurrently \"npm run agent:0\" \"npm run agent:1\" \"npm run agent:2\"",
+    "mcp": "MCP_TRANSPORT=http MCP_PORT=5000 tsx src/mcp-server.ts",
+    "mcp:stdio": "MCP_TRANSPORT=stdio tsx src/mcp-server.ts",
+    "all": "concurrently \"npm run agent:0\" \"npm run agent:1\" \"npm run agent:2\" \"npm run mcp\""
   },
   "dependencies": {
+    "@0glabs/0g-serving-broker": "^2.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "axl-pubsub": "^0.1.1",
+    "dotenv": "^17.4.2",
     "ethers": "^6.13.4",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "openai": "^6.35.0",
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

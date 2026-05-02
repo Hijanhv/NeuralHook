@@ -1,8 +1,9 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { useReadContract, useReadContracts } from 'wagmi'
-import type { AgentStatus, AuditEntry, ConsensusResult, PoolStats, LPPosition, ILRisk } from './types'
-import { HOOK_ADDRESS, FUND_ADDRESS, HOOK_ABI, FUND_ABI, RISK_LABELS, isDeployed } from './contracts'
+import { useReadContracts } from 'wagmi'
+import { useAccount } from 'wagmi'
+import type { AgentStatus, AuditEntry, ConsensusResult, ILRisk } from './types'
+import { HOOK_ADDRESS, FUND_ADDRESS, HOOK_ABI, FUND_ABI, RISK_LABELS, isDeployed, computePoolId, sqrtPriceX96ToPrice } from './contracts'
 
 const AGENT_URLS = [
   process.env.NEXT_PUBLIC_AGENT_0 ?? 'http://localhost:4000',
@@ -88,66 +89,6 @@ export function useDerivedStats(history: ConsensusResult[]) {
   return { avgFee, riskDist, consensusRate }
 }
 
-export function useMockPoolStats(): PoolStats {
-  const [stats, setStats] = useState<PoolStats>({
-    tvl: 4_200_000, volume24h: 820_000, fee24h: 2460, currentTick: -887220,
-    sqrtPriceX96: '79228162514264337593543950336', ilProtected: 1_340_000,
-  })
-  useEffect(() => {
-    const id = setInterval(() => {
-      setStats(s => ({
-        ...s,
-        tvl: s.tvl + (Math.random() - 0.5) * 50000,
-        volume24h: s.volume24h + (Math.random() - 0.5) * 10000,
-        fee24h: s.fee24h + (Math.random() - 0.5) * 100,
-        currentTick: s.currentTick + Math.round((Math.random() - 0.5) * 10),
-      }))
-    }, 3000)
-    return () => clearInterval(id)
-  }, [])
-  return stats
-}
-
-const MOCK_RISKS = ['LOW', 'LOW', 'MEDIUM', 'MEDIUM', 'HIGH', 'CRITICAL'] as const
-const MOCK_FEES  = [500, 500, 3000, 3000, 7500, 10000]
-
-function makeMockConsensus(i: number): ConsensusResult {
-  const riskIdx = Math.floor(Math.random() * MOCK_RISKS.length)
-  const risk = MOCK_RISKS[riskIdx]
-  return {
-    ilRisk: risk,
-    predictedILBps: Math.round(Math.random() * 2000),
-    recommendedFee: MOCK_FEES[riskIdx],
-    rebalanceSignal: riskIdx >= 4,
-    yieldScore: Math.floor(Math.random() * 200),
-    timestamp: Math.floor((Date.now() - (20 - i) * 35000) / 1000),
-    signature: '0x' + 'ab'.repeat(32) + '1c',
-    signerAgentId: `agent-${i % 3}`,
-    agreementCount: 2 + (Math.random() > 0.5 ? 1 : 0),
-  }
-}
-
-export function useMockConsensusHistory(): ConsensusResult[] {
-  const [history, setHistory] = useState<ConsensusResult[]>(() =>
-    Array.from({ length: 12 }, (_, i) => makeMockConsensus(i))
-  )
-  useEffect(() => {
-    const id = setInterval(() => {
-      setHistory(prev => [...prev.slice(-19), makeMockConsensus(prev.length)])
-    }, 8000)
-    return () => clearInterval(id)
-  }, [])
-  return history
-}
-
-export function useMockPositions(): LPPosition[] {
-  return [
-    { id: '0x1a2b', tickLower: -887220, tickUpper: -880000, liquidity: '1234567890', entryPrice: 1820, currentIL: 1.2, ilRisk: 'LOW', claimableInsurance: 0 },
-    { id: '0x3c4d', tickLower: -880000, tickUpper: -870000, liquidity: '987654321', entryPrice: 1750, currentIL: 5.8, ilRisk: 'MEDIUM', claimableInsurance: 290 },
-    { id: '0x5e6f', tickLower: -870000, tickUpper: -860000, liquidity: '456789012', entryPrice: 1680, currentIL: 14.3, ilRisk: 'HIGH', claimableInsurance: 715 },
-  ]
-}
-
 // ── On-chain reads (only active when contract is deployed) ────────────────────
 
 export function useOnChainHookState() {
@@ -197,4 +138,73 @@ export function useOnChainFundStats() {
     totalClaimed:   data[2].status === 'success' ? toEth(data[2].result as bigint) : null,
     claimCount:     data[3].status === 'success' ? Number(data[3].result as bigint) : null,
   }
+}
+
+// ── Wallet LP position from NeuralHook contract ───────────────────────────────
+
+interface Position {
+  id: string
+  tickLower: number
+  tickUpper: number
+  entryPrice: number
+  positionValue: number
+  address: string
+}
+
+export interface WalletPosState {
+  connected: boolean
+  hasPosition: boolean
+  position: Position | null
+}
+
+export function useWalletLPPosition(): WalletPosState {
+  const { address } = useAccount()
+  const deployed = isDeployed()
+  const poolId = computePoolId()
+
+  const zero = '0x0000000000000000000000000000000000000000' as `0x${string}`
+  const lp = address ?? zero
+
+  const { data } = useReadContracts({
+    contracts: [
+      { address: HOOK_ADDRESS, abi: HOOK_ABI, functionName: 'entryPrices',    args: [poolId, lp] },
+      { address: HOOK_ADDRESS, abi: HOOK_ABI, functionName: 'entryTickLowers', args: [poolId, lp] },
+      { address: HOOK_ADDRESS, abi: HOOK_ABI, functionName: 'entryTickUppers', args: [poolId, lp] },
+      { address: HOOK_ADDRESS, abi: HOOK_ABI, functionName: 'positionValues',  args: [poolId, lp] },
+    ],
+    query: { enabled: deployed && !!address, refetchInterval: 10000 },
+  })
+
+  if (!address) return { connected: false, hasPosition: false, position: null }
+  if (!data)    return { connected: true,  hasPosition: false, position: null }
+
+  const entryPrice  = data[0].status === 'success' ? Number(data[0].result as bigint) : 0
+  const tickLower   = data[1].status === 'success' ? Number(data[1].result) : 0
+  const tickUpper   = data[2].status === 'success' ? Number(data[2].result) : 0
+  const posValue    = data[3].status === 'success' ? Number(data[3].result as bigint) / 1e18 : 0
+
+  if (entryPrice === 0) return { connected: true, hasPosition: false, position: null }
+
+  return {
+    connected: true,
+    hasPosition: true,
+    position: {
+      id: address.slice(0, 6) + '…' + address.slice(-4),
+      tickLower,
+      tickUpper,
+      entryPrice,
+      positionValue: posValue,
+      address,
+    },
+  }
+}
+
+// ── Fee/risk history chart data from real consensus ───────────────────────────
+
+export function useFeeHistory(history: ConsensusResult[]): { t: number; fee: number; risk: number }[] {
+  return history.map(r => ({
+    t:    r.timestamp * 1000,
+    fee:  r.recommendedFee,
+    risk: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].indexOf(r.ilRisk),
+  }))
 }

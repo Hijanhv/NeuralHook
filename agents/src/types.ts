@@ -10,6 +10,7 @@ export interface InferenceResult {
   timestamp: number
   resultHash: string
   signature: string
+  inferenceSource?: '0g' | 'local'
 }
 
 export interface Vote {
@@ -31,6 +32,7 @@ export interface AgentStatus {
   voteCount: number
   inferenceCount: number
   uptime: number
+  sqrtPriceX96?: string
 }
 
 export interface AuditEntry {

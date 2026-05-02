@@ -11,17 +11,18 @@ import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation
 import {LPFeeLibrary}        from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary}        from "v4-core/src/libraries/StateLibrary.sol";
 import {ECDSA}               from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {BaseHook}            from "./BaseHook.sol";
 import {ILInsuranceFund}     from "./ILInsuranceFund.sol";
 
-contract NeuralHook is IHooks {
+contract NeuralHook is BaseHook {
     using PoolIdLibrary for PoolKey;
-    using StateLibrary for IPoolManager;
+    using StateLibrary  for IPoolManager;
 
-    // ── Fee tiers (bps) ──────────────────────────────────────────────────────
-    uint24 public constant FEE_LOW      = 500;
-    uint24 public constant FEE_MEDIUM   = 3000;
-    uint24 public constant FEE_HIGH     = 7500;
-    uint24 public constant FEE_CRITICAL = 10000;
+    // ── Fee tiers (pips = 1/1,000,000) ──────────────────────────────────────
+    uint24 public constant FEE_LOW      = 500;    // 0.05%
+    uint24 public constant FEE_MEDIUM   = 3000;   // 0.30%
+    uint24 public constant FEE_HIGH     = 7500;   // 0.75%
+    uint24 public constant FEE_CRITICAL = 10000;  // 1.00%
 
     // ── Risk enum (must match agents/src/types.ts ILRisk index) ─────────────
     uint8 public constant RISK_LOW      = 0;
@@ -29,7 +30,6 @@ contract NeuralHook is IHooks {
     uint8 public constant RISK_HIGH     = 2;
     uint8 public constant RISK_CRITICAL = 3;
 
-    IPoolManager    public immutable poolManager;
     ILInsuranceFund public immutable insuranceFund;
     uint256         public immutable deployedChainId;
 
@@ -41,27 +41,41 @@ contract NeuralHook is IHooks {
     uint8   public currentRisk = RISK_LOW;
     uint256 public lastUpdateTimestamp;
 
-    uint256 public constant MAX_STALENESS = 60;
+    // Inference results older than 10 minutes are rejected
+    uint256 public constant MAX_STALENESS = 600;
 
-    mapping(bytes32 => uint160) public entryPrices;
+    // IL payout threshold: 20 bps = 0.2%
+    uint256 public constant IL_THRESHOLD_BPS = 20;
 
-    error OnlyPoolManager();
+    // ── Per-LP position tracking ──────────────────────────────────────────────
+    // poolId → LP → entry sqrtPriceX96
+    mapping(bytes32 => mapping(address => uint160)) public entryPrices;
+    // poolId → LP → position value (wei approximation)
+    mapping(bytes32 => mapping(address => uint256)) public positionValues;
+    // poolId → LP → entry tick range
+    mapping(bytes32 => mapping(address => int24))   public entryTickLowers;
+    mapping(bytes32 => mapping(address => int24))   public entryTickUppers;
+
+    // ── Insurance fund fee accrual ────────────────────────────────────────────
+    // Tracks 5% of LP fees earned per pool (in token0 units / pips).
+    // The keeper calls settleFundFee() periodically to forward accrued ETH to the fund.
+    mapping(bytes32 => uint128) public pendingFundFees;
+
+    // ── Errors ────────────────────────────────────────────────────────────────
     error OnlyOwner();
     error InvalidSignature();
     error StaleInference();
     error InvalidFee();
     error ContractPaused();
 
+    // ── Events ────────────────────────────────────────────────────────────────
     event InferenceUpdated(uint8 ilRisk, uint24 fee, bool rebalanceSignal, uint256 timestamp);
-    event LiquidityAdded(bytes32 indexed poolId, uint160 sqrtPriceX96);
-    event LiquidityRemoved(bytes32 indexed poolId, uint256 ilBps);
+    event LiquidityAdded(bytes32 indexed poolId, address indexed lp, uint160 sqrtPriceX96, int24 tickLower, int24 tickUpper);
+    event LiquidityRemoved(bytes32 indexed poolId, address indexed lp, uint256 ilBps);
+    event FeeAccrued(bytes32 indexed poolId, uint128 amount);
+    event FeeSettled(bytes32 indexed poolId, uint256 ethAmount);
     event OracleUpdated(address indexed newOracle);
     event Paused(bool paused);
-
-    modifier onlyPoolManager() {
-        if (msg.sender != address(poolManager)) revert OnlyPoolManager();
-        _;
-    }
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert OnlyOwner();
@@ -73,13 +87,16 @@ contract NeuralHook is IHooks {
         _;
     }
 
-    constructor(address _poolManager, address _oracle, address payable _insuranceFund) {
-        poolManager     = IPoolManager(_poolManager);
+    constructor(address _poolManager, address _oracle, address payable _insuranceFund)
+        BaseHook(_poolManager)
+    {
         trustedOracle   = _oracle;
         insuranceFund   = ILInsuranceFund(_insuranceFund);
         deployedChainId = block.chainid;
         owner           = msg.sender;
     }
+
+    receive() external payable {}
 
     // ── Admin ─────────────────────────────────────────────────────────────────
 
@@ -125,6 +142,7 @@ contract NeuralHook is IHooks {
     }
 
     // ── IL computation ────────────────────────────────────────────────────────
+    // Formula: IL = 1 - 2√k/(1+k) where k = exitPrice/entryPrice
 
     function computeIL(uint256 entrySqrtPrice, uint256 exitSqrtPrice) public pure returns (uint256 ilBps) {
         if (entrySqrtPrice == 0 || exitSqrtPrice == 0) return 0;
@@ -140,49 +158,71 @@ contract NeuralHook is IHooks {
         ilBps = (il * 10000) / 1e18;
     }
 
-    // ── IHooks implementation ─────────────────────────────────────────────────
+    // ── Insurance fund fee settlement ─────────────────────────────────────────
+    // Keeper sends ETH equal to accrued fund fees; the hook forwards it to the fund.
+
+    function settleFundFee(bytes32 poolId) external payable {
+        uint128 pending = pendingFundFees[poolId];
+        pendingFundFees[poolId] = 0;
+        uint256 amount = msg.value;
+        (bool ok,) = address(insuranceFund).call{value: amount}("");
+        require(ok, "fund transfer failed");
+        emit FeeSettled(poolId, amount);
+    }
+
+    // ── Hook callbacks ────────────────────────────────────────────────────────
 
     function beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
         external override onlyPoolManager
         returns (bytes4, BeforeSwapDelta, uint24)
     {
+        // Return dynamic fee override based on latest AI-determined IL risk
         uint24 feeOverride = currentFee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feeOverride);
     }
 
-    function afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
+    function afterSwap(address, PoolKey calldata key, SwapParams calldata params, BalanceDelta delta, bytes calldata)
         external override onlyPoolManager
         returns (bytes4, int128)
     {
+        // Track 5% of LP fee → insurance fund accrual
+        // Use the input token amount (zeroForOne: token0 in, else token1 in)
+        int128 inputAmount = params.zeroForOne ? delta.amount0() : delta.amount1();
+        if (inputAmount != 0) {
+            uint128 abs = inputAmount > 0 ? uint128(inputAmount) : uint128(-inputAmount);
+            uint128 lpFee    = uint128(uint256(abs) * currentFee / 1_000_000);
+            uint128 fundShare = lpFee / 20; // 5% of LP fee
+            if (fundShare > 0) {
+                bytes32 pid = PoolId.unwrap(key.toId());
+                pendingFundFees[pid] += fundShare;
+                emit FeeAccrued(pid, fundShare);
+            }
+        }
         return (IHooks.afterSwap.selector, 0);
     }
 
-    function beforeAddLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
+    function beforeAddLiquidity(address lp, PoolKey calldata key, ModifyLiquidityParams calldata params, bytes calldata)
         external override onlyPoolManager
         returns (bytes4)
     {
         PoolId poolId = key.toId();
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
         bytes32 pid = PoolId.unwrap(poolId);
-        if (entryPrices[pid] == 0) {
-            entryPrices[pid] = sqrtPriceX96;
-            emit LiquidityAdded(pid, sqrtPriceX96);
+
+        if (entryPrices[pid][lp] == 0) {
+            entryPrices[pid][lp]     = sqrtPriceX96;
+            entryTickLowers[pid][lp] = params.tickLower;
+            entryTickUppers[pid][lp] = params.tickUpper;
+
+            int256 liq = params.liquidityDelta;
+            uint256 posVal = liq > 0
+                ? (uint256(liq) * sqrtPriceX96) >> 96
+                : 1e17;
+            positionValues[pid][lp] = posVal;
+
+            emit LiquidityAdded(pid, lp, sqrtPriceX96, params.tickLower, params.tickUpper);
         }
         return IHooks.beforeAddLiquidity.selector;
-    }
-
-    function afterAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, BalanceDelta, BalanceDelta, bytes calldata)
-        external override onlyPoolManager
-        returns (bytes4, BalanceDelta)
-    {
-        return (IHooks.afterAddLiquidity.selector, BalanceDelta.wrap(0));
-    }
-
-    function beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
-        external override onlyPoolManager
-        returns (bytes4)
-    {
-        return IHooks.beforeRemoveLiquidity.selector;
     }
 
     function afterRemoveLiquidity(address lp, PoolKey calldata key, ModifyLiquidityParams calldata, BalanceDelta, BalanceDelta, bytes calldata)
@@ -191,32 +231,25 @@ contract NeuralHook is IHooks {
     {
         PoolId poolId = key.toId();
         bytes32 pid   = PoolId.unwrap(poolId);
-        uint160 entry = entryPrices[pid];
+        uint160 entry = entryPrices[pid][lp];
+
         if (entry > 0) {
             (uint160 exitPrice,,,) = poolManager.getSlot0(poolId);
-            uint256 ilBps = computeIL(entry, exitPrice);
-            emit LiquidityRemoved(pid, ilBps);
-            if (ilBps > 100) {
-                try insuranceFund.claim(payable(lp), ilBps, 1 ether) {} catch {}
+            uint256 ilBps    = computeIL(entry, exitPrice);
+            uint256 posValue = positionValues[pid][lp];
+
+            emit LiquidityRemoved(pid, lp, ilBps);
+
+            // Payout if IL exceeds 0.2% (20 bps)
+            if (ilBps > IL_THRESHOLD_BPS && posValue > 0) {
+                try insuranceFund.claim(payable(lp), ilBps, posValue) {} catch {}
             }
-            delete entryPrices[pid];
+
+            delete entryPrices[pid][lp];
+            delete positionValues[pid][lp];
+            delete entryTickLowers[pid][lp];
+            delete entryTickUppers[pid][lp];
         }
         return (IHooks.afterRemoveLiquidity.selector, BalanceDelta.wrap(0));
-    }
-
-    function beforeInitialize(address, PoolKey calldata, uint160) external override onlyPoolManager returns (bytes4) {
-        return IHooks.beforeInitialize.selector;
-    }
-
-    function afterInitialize(address, PoolKey calldata, uint160, int24) external override onlyPoolManager returns (bytes4) {
-        return IHooks.afterInitialize.selector;
-    }
-
-    function beforeDonate(address, PoolKey calldata, uint256, uint256, bytes calldata) external override onlyPoolManager returns (bytes4) {
-        return IHooks.beforeDonate.selector;
-    }
-
-    function afterDonate(address, PoolKey calldata, uint256, uint256, bytes calldata) external override onlyPoolManager returns (bytes4) {
-        return IHooks.afterDonate.selector;
     }
 }

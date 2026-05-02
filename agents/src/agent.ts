@@ -2,7 +2,13 @@ import express from 'express'
 import { runInference } from './og-inference.js'
 import { simulatePoolMetrics } from './il-calculator.js'
 import { tryConsensus } from './consensus.js'
-import { triggerRebalance, getAuditLog } from './keeperhub.js'
+import { triggerRebalance, getAuditLog, startRebalanceListener } from './keeperhub.js'
+import { initAXL, publishVote, isAxlActive } from './axl-gossip.js'
+import {
+  appendInferenceHistory, appendAuditEntry,
+  saveAgentSnapshot, loadAgentSnapshot,
+  getInferenceHistory,
+} from './og-storage.js'
 import type { Vote, ConsensusResult, AgentStatus } from './types.js'
 
 const NODE_ID = process.env.NODE_ID ?? '0'
@@ -15,48 +21,23 @@ const PEER_URLS = [
 ].filter((_, i) => i !== parseInt(NODE_ID))
 
 const INFERENCE_INTERVAL_MS = 30_000
+const SNAPSHOT_INTERVAL_MS  = 60_000
 
-const votes:   Map<string, Vote> = new Map()    // key = agentId
+const votes:   Map<string, Vote> = new Map()
 const history: ConsensusResult[] = []
-let inferenceCount = 0
-let voteCount      = 0
-let lastConsensus  = 0
+
+let latestSqrtPriceX96 = '79228162514264337593543950336'
+
+// Restore state from 0G Storage on startup
+const savedSnap = loadAgentSnapshot(NODE_ID)
+let inferenceCount = savedSnap?.inferenceCount ?? 0
+let voteCount      = savedSnap?.voteCount      ?? 0
+let lastConsensus  = savedSnap?.lastConsensus  ?? 0
 const startTime    = Date.now()
 
-// ── Inference loop ────────────────────────────────────────────────────────────
+// ── Gossip transport ──────────────────────────────────────────────────────────
 
-async function runLoop(): Promise<void> {
-  const start = Date.now()
-  try {
-    const metrics = simulatePoolMetrics()
-    const result  = await runInference(metrics)
-    inferenceCount++
-
-    const myVote: Vote = {
-      agentId:   `agent-${NODE_ID}`,
-      result,
-      latencyMs: Date.now() - start,
-      timestamp: Date.now(),
-    }
-
-    votes.set(`agent-${NODE_ID}`, myVote)
-    await gossipVote(myVote)
-
-    const allVotes = Array.from(votes.values())
-    const consensus = tryConsensus(allVotes)
-    if (consensus) {
-      lastConsensus = Date.now()
-      history.push(consensus)
-      if (history.length > 100) history.shift()
-      votes.clear()
-      await triggerRebalance(consensus).catch(() => {})
-    }
-  } catch (e) {
-    console.error(`[agent-${NODE_ID}] inference error:`, e)
-  }
-}
-
-async function gossipVote(vote: Vote): Promise<void> {
+async function httpGossip(vote: Vote): Promise<void> {
   await Promise.allSettled(
     PEER_URLS.map(url =>
       fetch(`${url}/vote`, {
@@ -66,6 +47,48 @@ async function gossipVote(vote: Vote): Promise<void> {
       })
     )
   )
+}
+
+// ── Inference loop ────────────────────────────────────────────────────────────
+
+async function runLoop(): Promise<void> {
+  const start = Date.now()
+  try {
+    const metrics = simulatePoolMetrics()
+    latestSqrtPriceX96 = metrics.sqrtPriceX96.toString()
+    const result  = await runInference(metrics)
+    inferenceCount++
+
+    // Persist inference result to 0G Storage
+    appendInferenceHistory(NODE_ID, result)
+
+    const myVote: Vote = {
+      agentId:   `agent-${NODE_ID}`,
+      result,
+      latencyMs: Date.now() - start,
+      timestamp: Date.now(),
+    }
+
+    votes.set(`agent-${NODE_ID}`, myVote)
+    await publishVote(myVote, httpGossip)
+
+    const allVotes = Array.from(votes.values())
+    const consensus = tryConsensus(allVotes)
+    if (consensus) {
+      lastConsensus = Date.now()
+      history.push(consensus)
+      if (history.length > 100) history.shift()
+      votes.clear()
+
+      const auditEntry = await triggerRebalance(consensus).catch(() => null)
+      if (auditEntry) {
+        // Persist audit entry to 0G Storage
+        appendAuditEntry(NODE_ID, auditEntry)
+      }
+    }
+  } catch (e) {
+    console.error(`[agent-${NODE_ID}] inference error:`, e)
+  }
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
@@ -89,8 +112,9 @@ app.get('/status', (_req, res) => {
     voteCount,
     inferenceCount,
     uptime:         ((Date.now() - startTime) / (Date.now() - startTime + 1)) * 100,
+    sqrtPriceX96:  latestSqrtPriceX96,
   }
-  res.json(status)
+  res.json({ ...status, transport: isAxlActive() ? 'axl' : 'http' })
 })
 
 app.get('/history', (_req, res) => {
@@ -101,15 +125,38 @@ app.get('/audit-log', (_req, res) => {
   res.json(getAuditLog())
 })
 
+app.get('/inference-history', (_req, res) => {
+  const limit = parseInt(String((_req.query as Record<string, string>).limit ?? '50'))
+  res.json(getInferenceHistory(NODE_ID, limit))
+})
+
 app.post('/trigger-volatility', (_req, res) => {
-  // Fire an extra inference immediately with high volatility
   void runLoop()
   res.json({ ok: true, message: `agent-${NODE_ID}: volatility triggered` })
 })
 
-app.listen(PORT, () => {
+// ── Startup ───────────────────────────────────────────────────────────────────
+
+app.listen(PORT, async () => {
   console.log(`[agent-${NODE_ID}] listening on :${PORT}`)
-  // Start inference loop
+  if (savedSnap) console.log(`[agent-${NODE_ID}] restored state from 0G Storage (${savedSnap.inferenceCount} prior inferences)`)
+
+  // Gensyn AXL p2p gossip
+  const { active } = await initAXL(vote => {
+    votes.set(vote.agentId, vote)
+    voteCount++
+  })
+  console.log(`[agent-${NODE_ID}] gossip transport: ${active ? 'Gensyn AXL' : 'HTTP fallback'}`)
+
+  // KeeperHub on-chain event listener
+  startRebalanceListener()
+
+  // Inference loop
   setInterval(() => void runLoop(), INFERENCE_INTERVAL_MS)
-  setTimeout(() => void runLoop(), 2000) // first run after 2s
+  setTimeout(() => void runLoop(), 2000)
+
+  // Periodic state snapshot → 0G Storage
+  setInterval(() => {
+    saveAgentSnapshot({ nodeId: NODE_ID, lastConsensus, inferenceCount, voteCount, savedAt: Date.now() })
+  }, SNAPSHOT_INTERVAL_MS)
 })

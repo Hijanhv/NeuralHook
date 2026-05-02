@@ -53,7 +53,7 @@ export default function P5NeuralNet({ intensity = 'calm', className = '' }: Prop
         p.draw = () => {
           p.clear()
           const speed = intensity === 'critical' ? 1.6 : intensity === 'active' ? 1.0 : 0.5
-          const baseAlpha = intensity === 'critical' ? 180 : intensity === 'active' ? 120 : 60
+          const baseAlpha = intensity === 'critical' ? 140 : intensity === 'active' ? 90 : 45
 
           for (const n of nodes) {
             n.x += n.vx * speed + p.random(-0.15, 0.15)
@@ -66,8 +66,8 @@ export default function P5NeuralNet({ intensity = 'calm', className = '' }: Prop
             const d = p.dist(nodes[a].x, nodes[a].y, nodes[b].x, nodes[b].y)
             if (d > 200) continue
             const alpha = p.map(d, 0, 200, baseAlpha, 0)
-            p.stroke(255, 255, 255, alpha)
-            p.strokeWeight(0.4)
+            p.stroke(17, 24, 39, alpha)
+            p.strokeWeight(0.5)
             p.line(nodes[a].x, nodes[a].y, nodes[b].x, nodes[b].y)
           }
           p.noStroke()
@@ -84,12 +84,12 @@ export default function P5NeuralNet({ intensity = 'calm', className = '' }: Prop
             const [a, b] = edges[pulse.edge]
             const px = p.lerp(nodes[a].x, nodes[b].x, pulse.t)
             const py = p.lerp(nodes[a].y, nodes[b].y, pulse.t)
-            p.fill(255, 255, 255, 220)
+            p.fill(17, 24, 39, 200)
             p.circle(px, py, 3)
           }
 
           for (const n of nodes) {
-            p.fill(255, 255, 255, baseAlpha + 40)
+            p.fill(17, 24, 39, baseAlpha + 30)
             p.circle(n.x, n.y, n.r * 2)
           }
         }

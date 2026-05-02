@@ -36,6 +36,7 @@ export interface AgentStatus {
   voteCount: number
   inferenceCount: number
   uptime: number
+  sqrtPriceX96?: string
 }
 
 export interface AuditEntry {

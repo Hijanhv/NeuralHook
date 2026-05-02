@@ -1,45 +1,52 @@
 'use client'
-import type { LPPosition } from '@/lib/types'
-import ILRiskBadge from './ILRiskBadge'
+import type { WalletPosState } from '@/lib/hooks'
 
-interface Props { positions: LPPosition[] }
+interface Props { walletPos: WalletPosState }
 
-export default function LPPositions({ positions }: Props) {
+export default function LPPositions({ walletPos }: Props) {
   return (
     <div className="card p-5 space-y-3">
-      <span className="text-[10px] font-mono uppercase tracking-widest text-[#666]">Your LP Positions</span>
-      {positions.length === 0 && (
-        <div className="text-[#444] font-mono text-xs py-4 text-center">No active positions</div>
+      <span className="font-mono text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Your LP Positions</span>
+
+      {!walletPos.connected && (
+        <div className="font-mono text-xs py-6 text-center" style={{ color: 'var(--text-muted)' }}>
+          Connect wallet to view your positions
+        </div>
       )}
-      <div className="space-y-2">
-        {positions.map(pos => (
-          <div key={pos.id} className="border border-[#1a1a1a] rounded p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs text-white">{pos.id}</span>
-              <ILRiskBadge risk={pos.ilRisk} size="sm" />
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
-              <div>
-                <div className="text-[#555]">Ticks</div>
-                <div className="text-white">{pos.tickLower} / {pos.tickUpper}</div>
-              </div>
-              <div>
-                <div className="text-[#555]">IL</div>
-                <div className="text-white">{pos.currentIL.toFixed(2)}%</div>
-              </div>
-              <div>
-                <div className="text-[#555]">Claimable</div>
-                <div className="text-white">${pos.claimableInsurance}</div>
-              </div>
-            </div>
-            {pos.claimableInsurance > 0 && (
-              <div className="text-[10px] font-mono text-[#555] border border-[#1a1a1a] rounded px-2 py-1 text-center">
-                ~${pos.claimableInsurance} auto-paid on remove liquidity
-              </div>
-            )}
+
+      {walletPos.connected && !walletPos.hasPosition && (
+        <div className="font-mono text-xs py-6 text-center space-y-1" style={{ color: 'var(--text-muted)' }}>
+          <div>No active position in ETH/USDC pool</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Add liquidity to be protected by NeuralHook</div>
+        </div>
+      )}
+
+      {walletPos.connected && walletPos.hasPosition && walletPos.position && (
+        <div className="rounded p-3 space-y-3" style={{ border: '1px solid var(--border)' }}>
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-xs" style={{ color: 'var(--text)' }}>{walletPos.position.id}</span>
+            <span className="font-mono text-xs px-2 py-0.5 rounded" style={{ border: '1px solid var(--border)', color: 'var(--text-muted)' }}>active</span>
           </div>
-        ))}
-      </div>
+          <div className="grid grid-cols-2 gap-3 font-mono text-xs">
+            <div>
+              <div style={{ color: 'var(--text-muted)' }}>Tick Range</div>
+              <div style={{ color: 'var(--text)' }}>{walletPos.position.tickLower} / {walletPos.position.tickUpper}</div>
+            </div>
+            <div>
+              <div style={{ color: 'var(--text-muted)' }}>Entry sqrtPrice</div>
+              <div style={{ color: 'var(--text)' }}>{walletPos.position.entryPrice.toLocaleString()}</div>
+            </div>
+            <div>
+              <div style={{ color: 'var(--text-muted)' }}>Position Value</div>
+              <div style={{ color: 'var(--text)' }}>{walletPos.position.positionValue.toFixed(4)} ETH</div>
+            </div>
+            <div>
+              <div style={{ color: 'var(--text-muted)' }}>IL Protection</div>
+              <div style={{ color: '#22C55E' }}>Active · &gt;0.2% covered</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

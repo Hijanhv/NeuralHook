@@ -1,111 +1,138 @@
 @import "tailwindcss";
 
+/* ── Design tokens (Anza-inspired warm palette) ── */
 :root {
-  --bg: #000000;
-  --bg-card: #0d0d0d;
-  --border: #222222;
-  --border-mid: #333333;
-  --white: #ffffff;
-  --background: #000000;
-  --foreground: #ffffff;
+  --bg:          #F9F8F5;
+  --bg-card:     #F2F0EB;
+  --bg-dark:     #1A1916;
+  --border:      #E5E3DC;
+  --border-mid:  #D4D1C9;
+  --text:        #1A1916;
+  --text-mid:    #3D3933;
+  --text-muted:  #6B6760;
+  --accent:      #3B4BD8;
+  --accent-hover:#2F3CB5;
+  --background:  #F9F8F5;
+  --foreground:  #1A1916;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-serif);
+  --font-sans:  var(--font-inter);
+  --font-mono:  var(--font-geist-mono);
 }
 
 body {
-  background: #000000;
-  color: #ffffff;
-  font-family: 'Courier New', Courier, monospace;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ── Cards ── */
 .card {
-  background: #0d0d0d;
-  border: 1px solid #222222;
-  border-radius: 4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
 /* ── Buttons ── */
 .btn-primary {
-  background: #ffffff;
-  color: #000000;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  background: var(--bg-dark);
+  color: #ffffff;
+  font-family: var(--font-inter), sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  border-radius: 2px;
-  padding: 0.5rem 1.5rem;
+  border-radius: 4px;
+  padding: 0.625rem 1.75rem;
   transition: opacity 0.15s;
+  display: inline-block;
+  text-align: center;
 }
-.btn-primary:hover { opacity: 0.85; }
+.btn-primary:hover { opacity: 0.82; }
 
 .btn-outline {
   background: transparent;
-  color: #ffffff;
-  border: 1px solid #ffffff;
+  color: var(--bg-dark);
+  border: 1.5px solid var(--bg-dark);
+  font-family: var(--font-inter), sans-serif;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  border-radius: 2px;
-  padding: 0.5rem 1.5rem;
+  border-radius: 4px;
+  padding: 0.625rem 1.75rem;
   transition: background 0.15s, color 0.15s;
+  display: inline-block;
+  text-align: center;
 }
-.btn-outline:hover { background: #ffffff; color: #000000; }
+.btn-outline:hover { background: var(--bg-dark); color: #ffffff; }
+
+.btn-accent {
+  background: var(--accent);
+  color: #ffffff;
+  font-family: var(--font-inter), sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 0.625rem 1.75rem;
+  transition: background 0.15s;
+  display: inline-block;
+  text-align: center;
+}
+.btn-accent:hover { background: var(--accent-hover); }
 
 /* ── Risk badges ── */
 .risk-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-family: 'Courier New', monospace;
+  gap: 5px;
+  font-family: var(--font-geist-mono), 'Courier New', monospace;
+  font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  border-radius: 2px;
+  border-radius: 3px;
   border: 1px solid currentColor;
   position: relative;
 }
-.risk-badge-LOW      { color: #aaaaaa; border-color: #444444; background: transparent; }
-.risk-badge-MEDIUM   { color: #dddddd; border-color: #888888; background: transparent; }
-.risk-badge-HIGH     { color: #ffffff; border-color: #cccccc; background: #111111; }
-.risk-badge-CRITICAL { background: #ffffff; color: #000000; border-color: #ffffff; animation: glitch 2s infinite; }
+.risk-badge-LOW      { color: #A8A49C; border-color: #D4D1C9; }
+.risk-badge-MEDIUM   { color: #57534A; border-color: #A8A49C; }
+.risk-badge-HIGH     { color: #1A1916; border-color: #57534A; background: var(--bg-card); }
+.risk-badge-CRITICAL { background: #1A1916; color: #F9F8F5; border-color: #1A1916; animation: glitch 2s infinite; }
 
-/* ── Scan-line overlay ── */
-.scanlines::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(255,255,255,0.015) 2px,
-    rgba(255,255,255,0.015) 4px
-  );
-  pointer-events: none;
-  z-index: 9999;
+/* ── Ticker strip ── */
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
 }
+.animate-ticker { animation: ticker 40s linear infinite; }
 
 /* ── Glitch ── */
 @keyframes glitch {
   0%, 90%, 100% { transform: translate(0); }
-  91% { transform: translate(-2px, 1px); filter: brightness(1.4); }
+  91% { transform: translate(-2px, 1px); filter: brightness(1.2); }
   93% { transform: translate(2px, -1px); }
   95% { transform: translate(-1px, 0); }
   97% { transform: translate(1px, 1px); }
 }
 
-/* ── Pulse ring for CRITICAL dot ── */
+/* ── Pulse for CRITICAL dot ── */
 @keyframes ping {
   75%, 100% { transform: scale(2); opacity: 0; }
 }
 .animate-ping { animation: ping 1s cubic-bezier(0,0,0.2,1) infinite; }
 
-/* ── Utility overrides ── */
-.text-muted { color: #666666; }
-.text-dim   { color: #999999; }
-.border-dim { border-color: #222222; }
+/* ── Divider ── */
+.divider { border-color: var(--border); }
+
+/* ── Utility ── */
+.text-muted  { color: var(--text-muted); }
+.text-mid    { color: var(--text-mid); }
+.border-base { border-color: var(--border); }

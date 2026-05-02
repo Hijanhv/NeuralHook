@@ -6,9 +6,8 @@ import { injected } from 'wagmi/connectors'
 import NeuralHookLogo from './NeuralHookLogo'
 
 const links = [
-  { href: '/', label: 'Home' },
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '/about', label: 'About' },
+  { href: '/about', label: 'How it works' },
 ]
 
 function WalletButton() {
@@ -20,7 +19,14 @@ function WalletButton() {
     return (
       <button
         onClick={() => disconnect()}
-        className="font-mono text-[10px] uppercase tracking-widest border border-[#333] px-3 py-1.5 text-white hover:border-white transition-colors"
+        style={{
+          border: '1px solid var(--border-mid)',
+          color: 'var(--text-mid)',
+          fontSize: '0.75rem',
+          letterSpacing: '0.08em',
+          borderRadius: '4px',
+        }}
+        className="font-mono uppercase px-3 py-1.5 hover:border-[var(--text)] hover:text-[var(--text)] transition-colors"
       >
         {address.slice(0, 6)}…{address.slice(-4)}
       </button>
@@ -29,9 +35,15 @@ function WalletButton() {
 
   return (
     <button
-      onClick={() => connect({ connector: injected() })}
+      onClick={() =>
+        connect(
+          { connector: injected() },
+          // Suppress "user rejected" from bubbling to the Next.js error overlay
+          { onError: () => {} },
+        )
+      }
       disabled={isPending}
-      className="font-mono text-[10px] uppercase tracking-widest border border-[#444] px-3 py-1.5 text-[#888] hover:border-white hover:text-white transition-colors disabled:opacity-40"
+      className="btn-outline !py-1.5 !px-4 !text-xs disabled:opacity-40"
     >
       {isPending ? 'Connecting…' : 'Connect'}
     </button>
@@ -41,26 +53,53 @@ function WalletButton() {
 export default function Navbar() {
   const path = usePathname()
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-[#222] bg-black/90 backdrop-blur-sm">
-      <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-3">
-          <NeuralHookLogo size={32} />
-          <span className="font-mono font-bold tracking-widest text-white text-sm uppercase">NeuralHook</span>
+    <nav
+      style={{ borderBottom: '1px solid var(--border)', background: 'rgba(249,248,245,0.94)' }}
+      className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md"
+    >
+      <div className="max-w-7xl mx-auto px-6 h-[64px] flex items-center justify-between">
+        {/* Brand */}
+        <Link href="/" className="flex items-center gap-3 select-none">
+          <NeuralHookLogo size={38} />
+          <span
+            style={{
+              fontFamily: 'var(--font-serif)',
+              fontSize: '1.25rem',
+              color: 'var(--text)',
+              letterSpacing: '-0.01em',
+            }}
+          >
+            NeuralHook
+          </span>
         </Link>
 
-        <div className="flex items-center gap-6">
+        {/* Nav links */}
+        <div className="hidden md:flex items-center gap-8">
           {links.map(l => (
             <Link
               key={l.href}
               href={l.href}
-              className={`font-mono text-xs uppercase tracking-widest transition-colors ${
-                path === l.href ? 'text-white' : 'text-[#666] hover:text-white'
-              }`}
+              style={{
+                fontFamily: 'var(--font-inter)',
+                fontSize: '0.8125rem',
+                color: path === l.href ? 'var(--text)' : 'var(--text-muted)',
+                fontWeight: path === l.href ? 500 : 400,
+                letterSpacing: '0.01em',
+              }}
+              className="hover:!text-[var(--text)] transition-colors"
             >
               {l.label}
             </Link>
           ))}
+        </div>
+
+        {/* Right actions */}
+        <div className="flex items-center gap-3">
           <WalletButton />
+          {/* Launch App → dashboard (no wallet gate) */}
+          <Link href="/dashboard" className="btn-primary !py-1.5 !px-5 !text-xs">
+            Launch App
+          </Link>
         </div>
       </div>
     </nav>

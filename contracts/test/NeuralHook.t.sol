@@ -11,6 +11,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency}      from "v4-core/src/types/Currency.sol";
 import {LPFeeLibrary}  from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {NeuralHook}    from "../src/NeuralHook.sol";
+import {BaseHook}      from "../src/BaseHook.sol";
 import {ILInsuranceFund} from "../src/ILInsuranceFund.sol";
 import {HookMiner}     from "../src/HookMiner.sol";
 
@@ -50,7 +51,7 @@ contract NeuralHookTest is Test {
         assembly {
             hookAddr := create2(0, add(initCode, 0x20), mload(initCode), salt)
         }
-        hook = NeuralHook(hookAddr);
+        hook = NeuralHook(payable(hookAddr));
         fund.setHook(hookAddr);
     }
 
@@ -119,7 +120,7 @@ contract NeuralHookTest is Test {
 
     function test_StaleInferenceRejected() public {
         bytes32 rh = keccak256("stale");
-        uint256 staleTs = block.timestamp - 61;
+        uint256 staleTs = block.timestamp - 601; // > MAX_STALENESS (600)
         uint24 fee = hook.FEE_LOW();
         bytes memory sig = _sign(rh, 0, 0, fee, false, 50, staleTs);
 
@@ -167,13 +168,17 @@ contract NeuralHookTest is Test {
         assertEq(hook.FEE_CRITICAL(), 10000);
     }
 
+    function test_ILThresholdIs20Bps() public view {
+        assertEq(hook.IL_THRESHOLD_BPS(), 20);
+    }
+
     function test_OnlyPoolManagerCanCallBeforeSwap() public {
         PoolKey memory key;
         key.hooks = IHooks(address(hook));
         key.fee   = LPFeeLibrary.DYNAMIC_FEE_FLAG;
 
         vm.prank(address(0x1234));
-        vm.expectRevert(NeuralHook.OnlyPoolManager.selector);
+        vm.expectRevert(BaseHook.OnlyPoolManager.selector);
         hook.beforeSwap(address(this), key, SwapParams({zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: 0}), "");
     }
 

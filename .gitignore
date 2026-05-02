@@ -13,6 +13,9 @@ contracts/cache/
 .env
 .env.local
 
+# Runtime data
+agents/data/
+
 # Misc
 .DS_Store
 *.tsbuildinfo
