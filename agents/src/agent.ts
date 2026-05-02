@@ -26,7 +26,7 @@ const SNAPSHOT_INTERVAL_MS  = 60_000
 const votes:   Map<string, Vote> = new Map()
 const history: ConsensusResult[] = []
 
-let latestSqrtPriceX96 = '79228162514264337593543950336'
+let latestSqrtPriceX96 = '3543191142285914205922034'
 
 // Restore state from 0G Storage on startup
 const savedSnap = loadAgentSnapshot(NODE_ID)

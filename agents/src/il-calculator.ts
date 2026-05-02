@@ -54,7 +54,8 @@ export function simulatePoolMetrics(): {
     volatility:    Math.min(baseVol + spike, 1),
     tickProximity: 0.3 + Math.random() * 0.4,
     momentum:      (Math.random() - 0.5) * 0.5,
-    sqrtPriceX96:  1771595571142957166519155961327389600n +
-                   BigInt(Math.round((Math.random() - 0.5) * 1e20)),
+    // token0=ETH(18dec), token1=USDC(6dec) — base ≈ $2000/ETH, ±1% swing
+    sqrtPriceX96:  3543191142285914205922034n +
+                   BigInt(Math.round((Math.random() - 0.5) * 3.54e22)),
   }
 }
