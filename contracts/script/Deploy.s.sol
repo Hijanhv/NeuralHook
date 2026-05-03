@@ -64,7 +64,9 @@ contract DeployScript is Script {
             tickSpacing: 60,
             hooks:       IHooks(address(hook))
         });
-        uint160 sqrtPriceX96 = 1771595571142957166519155961327389600; // ≈ 1800 USDC/ETH
+        // token0=ETH(18dec), token1=USDC(6dec): sqrtPriceX96 = sqrt(price_raw) * 2^96
+        // price_raw = USDC_raw/ETH_raw = 2000 * 1e6 / 1e18 = 2e-9  →  sqrt ≈ 4.47e-5
+        uint160 sqrtPriceX96 = 3543191142285914205922034; // ≈ $2000 ETH, token0=ETH
         IPoolManager(POOL_MANAGER).initialize(key, sqrtPriceX96);
         console.log("Pool initialized");
 

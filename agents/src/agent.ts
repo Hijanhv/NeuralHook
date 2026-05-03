@@ -4,6 +4,7 @@ import { simulatePoolMetrics } from './il-calculator.js'
 import { tryConsensus } from './consensus.js'
 import { triggerRebalance, getAuditLog, startRebalanceListener } from './keeperhub.js'
 import { initAXL, publishVote, isAxlActive } from './axl-gossip.js'
+import { fetchOnChainSqrtPrice } from './on-chain.js'
 import {
   appendInferenceHistory, appendAuditEntry,
   saveAgentSnapshot, loadAgentSnapshot,
@@ -54,7 +55,12 @@ async function httpGossip(vote: Vote): Promise<void> {
 async function runLoop(): Promise<void> {
   const start = Date.now()
   try {
+    // Try to read sqrtPriceX96 from the live Uniswap v4 pool first
+    const onChainSqrt = await fetchOnChainSqrtPrice()
     const metrics = simulatePoolMetrics()
+    if (onChainSqrt !== null) {
+      metrics.sqrtPriceX96 = onChainSqrt
+    }
     latestSqrtPriceX96 = metrics.sqrtPriceX96.toString()
     const result  = await runInference(metrics)
     inferenceCount++
