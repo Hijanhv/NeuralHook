@@ -4,7 +4,7 @@
 
 NeuralHook is a Uniswap v4 hook that uses a three-node AI agent network to predict impermanent loss risk before it happens. When risk rises, the pool fee surges automatically to compensate LPs. Every fee change is cryptographically signed by the inference layer and verified atomically on-chain — the AI cannot hallucinate a fee.
 
-🎥 **[Watch the demo](https://youtu.be/rY4npbPU5bQ?si=KO4Gj0y8LV0OzR7H)**
+🎥 **[Watch the demo](https://youtu.be/rY4npbPU5bQ?si=KO4Gj0y8LV0OzR7H)** · 🏆 **[ETHGlobal Showcase](https://ethglobal.com/showcase/neuralhook-8gxzp)**
 
 ---
 
