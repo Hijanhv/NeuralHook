@@ -22,16 +22,30 @@ NeuralHook is a Uniswap v4 hook that uses a three-node AI agent network to predi
 
 ## 🏗️ Architecture
 
-```text id="46hi28"
-Pool State (sqrtPriceX96)
-        ↓
-0G Inference (TEE)
-        ↓
-Gensyn AXL Consensus (3-of-3 gossip → 2-of-3 threshold)
-        ↓
-KeeperHub (eth_call simulation → broadcast)
-        ↓
-NeuralHook.sol (ECDSA.recover → fee override)
+```mermaid
+flowchart TD
+    PM["PoolManager\n(Unichain Sepolia)"]
+
+    subgraph Agents["Agent Mesh — Gensyn AXL (3 nodes)"]
+        A0["Agent-0 · :4000"]
+        A1["Agent-1 · :4001"]
+        A2["Agent-2 · :4002"]
+        A0 <-->|gossip votes| A1
+        A1 <-->|gossip votes| A2
+        A0 <-->|gossip votes| A2
+    end
+
+    PM -->|"sqrtPriceX96 (extsload)"| A0
+    PM -->|"sqrtPriceX96 (extsload)"| A1
+    PM -->|"sqrtPriceX96 (extsload)"| A2
+
+    A0 & A1 & A2 -->|volatility + momentum| OG["0G Sealed Inference\n(TEE — signs output before leaving model)"]
+    OG -->|"ILRisk + fee + ECDSA sig"| Agents
+
+    Agents -->|"2-of-3 consensus · agent-0 submits"| KH["KeeperHub MCP\n(eth_call simulate → broadcast)"]
+    KH -->|submitConsensusResult| Hook["NeuralHook.sol\n(ECDSA.recover → currentFee override)"]
+    Hook -->|fee applied per swap| PM
+    Hook --- Fund["ILInsuranceFund.sol\n(ETH reserve · 10% cap per claim)"]
 ```
 
 Four layers — remove any one and the system stops working.
@@ -207,80 +221,91 @@ NeuralHook/
 
 ## 🛠️ Running Locally
 
-## Prerequisites
+> The contracts are **already deployed** on Unichain Sepolia — you do not need to redeploy to run the project. Just start the agents and frontend.
+
+### Prerequisites
 
 * Node.js 18+
-* Foundry
+* A funded Unichain Sepolia wallet (get testnet ETH from the [Unichain faucet](https://faucet.unichain.org))
+* Git
 
-Install Foundry:
+### Step 1 — Clone
 
-```bash id="xftnfh"
-curl -L https://foundry.paradigm.xyz | bash
+```bash
+git clone https://github.com/Hijanhv/NeuralHook.git
+cd NeuralHook
 ```
 
----
+### Step 2 — Configure agents
 
-## 1️⃣ Contracts
-
-```bash id="eiemgj"
-cd contracts
-forge install
-forge test
-forge build
-```
-
-Redeploy:
-
-```bash id="g1x4jo"
-export PRIVATE_KEY=...
-export DEPLOYER_ADDRESS=...
-export ORACLE_ADDRESS=...
-export UNICHAIN_SEPOLIA_RPC=https://unichain-sepolia-rpc.publicnode.com
-
-forge script script/Deploy.s.sol \
-  --rpc-url unichain_sepolia \
-  --broadcast
-```
-
----
-
-## 2️⃣ Agents
-
-```bash id="mk1s9a"
+```bash
 cd agents
 npm install
 cp .env.example .env
+```
+
+Edit `.env` and fill in:
+
+```env
+PRIVATE_KEY=0x...           # wallet with Unichain Sepolia ETH (submits on-chain txs)
+ORACLE_PRIVATE_KEY=0x...    # oracle signer key (signs inference results)
+HOOK_ADDRESS=0x6DCb771F0A8A61F2679989453af9549C9ceA89c0
+FUND_ADDRESS=0x4D575ac6C3df76C7E22EB59715F0a9e839f16811
+RPC_URL=https://unichain-sepolia-rpc.publicnode.com
+CHAIN_ID=1301
+```
+
+> Both `PRIVATE_KEY` and `ORACLE_PRIVATE_KEY` can be the same wallet for local testing.
+
+### Step 3 — Start agents
+
+```bash
 npm start
 ```
 
-Runs agents on:
+This starts three agents on `:4000`, `:4001`, `:4002`. Each runs its own inference loop, gossips votes with the others, and agent-0 submits consensus results on-chain every ~30 seconds.
 
-* `:4000`
-* `:4001`
-* `:4002`
+Agent API endpoints (once running):
 
-### API Endpoints
+| Endpoint | Description |
+|---|---|
+| `GET /status` | Agent health + stats |
+| `GET /history` | Consensus round history |
+| `GET /audit-log` | Full on-chain submission log |
+| `POST /trigger-volatility` | Force a high-volatility inference round |
 
-* `GET /status`
-* `GET /history`
-* `GET /audit-log`
-* `POST /trigger-volatility`
+### Step 4 — Start frontend
 
----
+In a new terminal:
 
-## 3️⃣ Frontend
-
-```bash id="xlb079"
+```bash
 cd frontend
 npm install
 npm run dev -- --port 3001
 ```
 
-Open:
+Open **http://localhost:3001/dashboard** — the dashboard reads live agent data from `:4000/4001/4002` and live contract state from Unichain Sepolia automatically.
 
-```text id="2h356h"
-http://localhost:3001/dashboard
+---
+
+### Redeploy contracts (optional)
+
+The deployed contracts are live and don't need to be redeployed. If you want to deploy your own instance:
+
+```bash
+cd contracts
+forge install
+forge test
+
+export PRIVATE_KEY=0x...
+export DEPLOYER_ADDRESS=0x...
+export ORACLE_ADDRESS=0x...
+export UNICHAIN_SEPOLIA_RPC=https://unichain-sepolia-rpc.publicnode.com
+
+forge script script/Deploy.s.sol --rpc-url unichain_sepolia --broadcast
 ```
+
+Then update `HOOK_ADDRESS` and `FUND_ADDRESS` in `agents/.env` and `frontend/.env.local`.
 
 ---
 
