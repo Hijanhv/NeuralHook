@@ -100,6 +100,7 @@ async function runLoop(): Promise<void> {
 // ── HTTP server ───────────────────────────────────────────────────────────────
 
 const app = express()
+app.use((_req, res, next) => { res.setHeader('Access-Control-Allow-Origin', '*'); next() })
 app.use(express.json())
 
 app.post('/vote', (req, res) => {

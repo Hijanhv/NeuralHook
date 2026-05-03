@@ -69,7 +69,7 @@ export default function PriceChart({ data }: Props) {
       ctx.lineWidth = 1
       ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(W - PR, y); ctx.stroke()
       ctx.fillStyle = MUTED
-      ctx.fillText(`${(f / 100).toFixed(2)}%`, PL - 5, y)
+      ctx.fillText(`${(f / 10000).toFixed(2)}%`, PL - 5, y)
     }
 
     // X labels
@@ -137,7 +137,7 @@ export default function PriceChart({ data }: Props) {
           </span>
           <div className="flex items-baseline gap-2 mt-0.5">
             <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.25rem', color: 'var(--text)' }}>
-              {latestFee ? `${(latestFee / 100).toFixed(2)}%` : '—'}
+              {latestFee ? `${(latestFee / 10000).toFixed(2)}%` : '—'}
             </span>
             <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>current fee</span>
           </div>

@@ -14,7 +14,7 @@ export default function FeeGauge({ fee, risk }: Props) {
     <div className="card p-5 space-y-3">
       <div className="flex justify-between items-center">
         <span className="font-mono text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Dynamic Fee</span>
-        <span className="font-mono text-lg font-bold" style={{ color: 'var(--text)' }}>{(fee / 100).toFixed(2)}%</span>
+        <span className="font-mono text-lg font-bold" style={{ color: 'var(--text)' }}>{(fee / 10000).toFixed(2)}%</span>
       </div>
       <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
         <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: BAR[risk] }} />

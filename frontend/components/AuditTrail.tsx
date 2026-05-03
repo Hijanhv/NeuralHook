@@ -25,7 +25,7 @@ export default function AuditTrail({ entries }: Props) {
               <div className="flex gap-4 mt-0.5" style={{ color: 'var(--text-muted)' }}>
                 <span>{e.txHash.slice(0, 10)}…</span>
                 <span>{e.gasUsed.toLocaleString()} gas</span>
-                <span>{(e.fee / 100).toFixed(2)}% fee</span>
+                <span>{(e.fee / 10000).toFixed(2)}% fee</span>
               </div>
             </div>
             <span className="flex-shrink-0" style={{ color: 'var(--text-muted)' }}>{new Date(e.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

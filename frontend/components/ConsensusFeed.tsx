@@ -44,7 +44,7 @@ export default function ConsensusFeed({ history }: Props) {
               <div className="flex items-center gap-3">
                 <ILRiskBadge risk={r.ilRisk} size="sm" />
                 <span className="font-mono text-xs" style={{ color: 'var(--text-mid)' }}>
-                  {(r.recommendedFee / 100).toFixed(2)}% fee
+                  {(r.recommendedFee / 10000).toFixed(2)}% fee
                 </span>
               </div>
               <div className="flex items-center gap-3">

@@ -94,12 +94,12 @@ export default function DashboardPage() {
           </div>
           <StatCard
             label="Active Fee"
-            value={`${(currentFee / 100).toFixed(2)}%`}
+            value={`${(currentFee / 10000).toFixed(2)}%`}
             sub={chain.deployed ? 'on-chain override' : 'dynamic override'}
           />
           <StatCard
             label="Avg Fee (session)"
-            value={avgFee > 0 ? `${(avgFee / 100).toFixed(2)}%` : '—'}
+            value={avgFee > 0 ? `${(avgFee / 10000).toFixed(2)}%` : '—'}
             sub={avgFee > 0 ? `${liveHistory.length} rounds` : agentsOnline ? 'loading…' : 'agents offline'}
           />
           <StatCard
