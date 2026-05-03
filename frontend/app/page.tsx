@@ -11,12 +11,12 @@ const P5NeuralNet = dynamic(() => import('@/components/P5NeuralNet'), { ssr: fal
 const RISKS: ILRisk[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
 
 const TICKER_ITEMS = [
-  'Now live on Unichain Sepolia',
-  '0G Sealed Inference — TEE-attested AI',
+  'Hook deployed · block 50918795 · Unichain Sepolia',
+  '0G Sealed Inference — TEE-attested AI decisions',
   'Gensyn AXL — 3-node 2-of-3 consensus',
-  'KeeperHub MCP — gas-simulated execution',
-  'ETH/USDC pool · chainId 1301',
-  'Every fee change is cryptographically proven',
+  'KeeperHub MCP — gas-simulated on-chain execution',
+  'ETH/USDC pool · chain ID 1301 · fee updating live',
+  'Every fee change is cryptographically proven on-chain',
 ]
 
 export default function HomePage() {
@@ -34,10 +34,9 @@ export default function HomePage() {
 
   return (
     <main className="relative min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
-      {/* Subtle neural net background */}
       <P5NeuralNet intensity="calm" className="fixed inset-0 w-full h-full opacity-[0.07]" />
 
-      {/* ── Announcement ticker (ebisu-inspired) ── */}
+      {/* Announcement ticker */}
       <div style={{ background: 'var(--bg-dark)', borderBottom: '1px solid #333' }}
            className="fixed top-[60px] left-0 right-0 z-40 overflow-hidden h-8 flex items-center">
         <div className="flex whitespace-nowrap animate-ticker gap-0">
@@ -49,17 +48,15 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Hero ── */}
+      {/* Hero */}
       <section className="relative z-10 flex flex-col items-center justify-center min-h-screen px-6 text-center gap-12 pt-28">
-        {/* Logo + eyebrow */}
         <div className="flex flex-col items-center gap-5">
           <NeuralHookLogo size={52} />
           <p className="font-mono text-[13px] tracking-[0.22em] uppercase" style={{ color: 'var(--text-muted)' }}>
-            Uniswap v4 Hook · Unichain Sepolia
+            Uniswap v4 Hook · Unichain Sepolia · Live
           </p>
         </div>
 
-        {/* Editorial headline — DM Serif Display */}
         <div className="max-w-4xl">
           <h1
             style={{ fontFamily: 'var(--font-serif)', fontSize: 'clamp(3.5rem, 9vw, 7.5rem)', lineHeight: 0.95, letterSpacing: '-0.02em', color: 'var(--text)' }}
@@ -86,17 +83,17 @@ export default function HomePage() {
         {/* CTAs */}
         <div className="flex flex-wrap gap-3 justify-center">
           <Link href="/dashboard" className="btn-primary">View Dashboard</Link>
-          <Link href="/connect" className="btn-outline">Connect Wallet</Link>
+          <Link href="/about" className="btn-outline">How it works</Link>
         </div>
 
-        {/* Stat callout — anza style dark card */}
+        {/* Stat callout */}
         <div
           className="flex gap-px mt-4"
           style={{ border: '1px solid var(--border)' }}
         >
           {[
-            { value: '$260M', label: 'IL suffered by LPs in 2024' },
-            { value: '-$60M', label: 'Net loss vs simply holding' },
+            { value: 'LIVE', label: 'Hook updating on-chain now' },
+            { value: '41k gas', label: 'Per consensus submission' },
             { value: '2-of-3', label: 'Agent consensus required' },
           ].map((s, i) => (
             <div key={i} className="px-10 py-5 text-center" style={{ borderRight: i < 2 ? '1px solid var(--border)' : 'none' }}>
@@ -107,7 +104,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Four-layer architecture ── */}
+      {/* Four-layer architecture */}
       <section className="relative z-10 max-w-5xl mx-auto px-6 py-28 w-full">
         <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3" style={{ color: 'var(--text-muted)' }}>
           Architecture
@@ -119,20 +116,20 @@ export default function HomePage() {
         <div style={{ border: '1px solid var(--border)' }}>
           {[
             {
-              num: '01', name: 'Smart Contracts', tech: 'Uniswap v4 · Solidity 0.8.26',
-              desc: 'NeuralHook.sol enforces oracle signatures before executing any fee change. ILInsuranceFund.sol holds ETH reserves — 10% drain protection per claim.',
+              num: '01', name: 'Smart Contracts', tech: 'Uniswap v4 · Solidity 0.8.26 · Unichain Sepolia',
+              desc: 'NeuralHook.sol verifies ECDSA oracle signatures before executing any fee change. ILInsuranceFund.sol holds ETH reserves with 10% drain protection per claim.',
             },
             {
-              num: '02', name: 'AI Inference', tech: '0G Sealed Inference · TEE',
-              desc: 'Processes pool volatility, tick proximity, and momentum inside a Trusted Execution Environment. Produces ECDSA-signed IL risk — LOW to CRITICAL.',
+              num: '02', name: 'AI Inference', tech: '0G Sealed Inference · TEE · local fallback',
+              desc: 'Processes pool volatility, tick proximity, and momentum. Produces a signed IL risk (LOW → CRITICAL) and recommended fee. Output signed inside TEE before leaving the model.',
             },
             {
-              num: '03', name: 'Agent Consensus', tech: 'Gensyn AXL · 3 nodes',
-              desc: 'Three independent agents run inference in parallel. AXL HTTP gossip achieves 2-of-3 threshold consensus. One node can lie — system still wins.',
+              num: '03', name: 'Agent Consensus', tech: 'Gensyn AXL · 3 nodes · 2-of-3 threshold',
+              desc: "Three agents gossip votes over HTTP. When 2-of-3 agree on the same risk class, consensus is declared and the fastest-responding agent's signature is used on-chain.",
             },
             {
-              num: '04', name: 'Execution', tech: 'KeeperHub MCP · ethers.js',
-              desc: 'Simulates gas, submits the consensus signature on-chain, retries with exponential backoff (1s → 2s → 4s). Full audit trail on every action.',
+              num: '04', name: 'KeeperHub Execution', tech: 'MCP Tool · eth_call simulation · publicnode RPC',
+              desc: 'Simulates every tx via eth_call before broadcasting. Only agent-0 submits to prevent nonce collisions. Gas fetched live from the network. Full AuditEntry on every round.',
             },
           ].map((row, i, arr) => (
             <div
@@ -154,7 +151,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Why trust it ── */}
+      {/* Why trust it */}
       <section className="relative z-10 w-full" style={{ background: 'var(--bg-dark)' }}>
         <div className="max-w-5xl mx-auto px-6 py-20">
           <p className="font-mono text-xs tracking-[0.2em] uppercase mb-3 text-white/65">Trust</p>
@@ -182,15 +179,34 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Built with ── */}
+      {/* Deployed contracts */}
       <section className="relative z-10 max-w-5xl mx-auto px-6 py-16 w-full">
+        <p className="font-mono text-xs tracking-[0.2em] uppercase mb-6" style={{ color: 'var(--text-muted)' }}>Deployed contracts · Unichain Sepolia</p>
+        <div style={{ border: '1px solid var(--border)' }}>
+          {[
+            { name: 'NeuralHook', addr: '0x6DCb771F0A8A61F2679989453af9549C9ceA89c0', note: 'Hook · dynamic fee oracle' },
+            { name: 'ILInsuranceFund', addr: '0x4D575ac6C3df76C7E22EB59715F0a9e839f16811', note: 'Insurance reserve · 0.01 ETH seed' },
+            { name: 'PoolManager', addr: '0x00B036B58a818B1BC34d502D3fE730Db729e62AC', note: 'Uniswap v4 · Unichain Sepolia' },
+          ].map((c, i, arr) => (
+            <div key={c.name} className="grid px-6 py-4 gap-4 items-center"
+              style={{ gridTemplateColumns: '10rem 1fr auto', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
+              <span style={{ fontFamily: 'var(--font-inter)', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>{c.name}</span>
+              <span className="font-mono text-xs truncate" style={{ color: 'var(--text-muted)' }}>{c.addr}</span>
+              <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{c.note}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Built with */}
+      <section className="relative z-10 max-w-5xl mx-auto px-6 pb-16 w-full">
         <p className="font-mono text-xs tracking-[0.2em] uppercase mb-6" style={{ color: 'var(--text-muted)' }}>Built with</p>
         <div className="flex flex-wrap gap-px" style={{ border: '1px solid var(--border)' }}>
           {[
             { name: 'Uniswap v4', role: 'Hook protocol' },
             { name: '0G Network', role: 'Sealed AI inference' },
             { name: 'Gensyn AXL', role: '3-node consensus' },
-            { name: 'KeeperHub', role: 'MCP execution' },
+            { name: 'KeeperHub MCP', role: 'Execution layer' },
             { name: 'Unichain', role: 'L2 deployment' },
           ].map((s, i, arr) => (
             <div key={s.name} className="px-6 py-5 flex-1"

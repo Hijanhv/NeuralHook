@@ -73,6 +73,11 @@ export default function DashboardPage() {
             <p className="font-mono text-[13px] mt-1" style={{ color: 'var(--text-muted)' }}>
               ETH / USDC · Uniswap v4 · Unichain Sepolia
             </p>
+            {chain.lastUpdate && chain.lastUpdate > 0 && (
+              <p className="font-mono text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                Last on-chain update {new Date(chain.lastUpdate * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <DataSourceBadge source={dataSource} />
