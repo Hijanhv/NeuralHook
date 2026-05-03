@@ -105,7 +105,7 @@ Each agent runs a **30-second inference loop**:
 * Calls 0G Sealed Inference (TEE) or local heuristic fallback
 * Outputs:
 
-```text id="0pp6ao"
+```text
 ILRisk
 recommendedFee
 rebalanceSignal
@@ -114,7 +114,7 @@ yieldScore
 
 Signs result:
 
-```solidity id="op48w3"
+```solidity
 solidityPackedKeccak256([
   resultHash,
   ilRisk,
@@ -159,7 +159,7 @@ Prevents nonce collisions when agents share one oracle key.
 
 Before broadcasting every transaction, KeeperHub calls:
 
-```text id="8qnyaq"
+```text
 eth_call
 ```
 
@@ -187,7 +187,7 @@ Unichain Sepolia public RPC does not support `eth_newFilter`.
 
 ## 📂 Repository Structure
 
-```text id="sghndr"
+```text
 NeuralHook/
 ├── contracts/
 │   ├── src/
