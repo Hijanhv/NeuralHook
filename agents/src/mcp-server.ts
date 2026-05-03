@@ -49,7 +49,7 @@ server.tool(
         text: JSON.stringify({
           ilRisk:          result.ilRisk,
           recommendedFee:  result.recommendedFee,
-          feePercent:      `${(result.recommendedFee / 100).toFixed(2)}%`,
+          feePercent:      `${(result.recommendedFee / 10000).toFixed(2)}%`,
           predictedILBps:  result.predictedILBps,
           rebalanceSignal: result.rebalanceSignal,
           yieldScore:      result.yieldScore,
@@ -137,7 +137,7 @@ server.tool(
           inferred: {
             ilRisk:         result.ilRisk,
             recommendedFee: result.recommendedFee,
-            feePercent:     `${(result.recommendedFee / 100).toFixed(2)}%`,
+            feePercent:     `${(result.recommendedFee / 10000).toFixed(2)}%`,
           },
           submitted: {
             success: entry.success,
@@ -188,7 +188,7 @@ server.tool(
           volatilityUsed:  shocked.volatility.toFixed(4),
           ilRisk:          result.ilRisk,
           recommendedFee:  result.recommendedFee,
-          feePercent:      `${(result.recommendedFee / 100).toFixed(2)}%`,
+          feePercent:      `${(result.recommendedFee / 10000).toFixed(2)}%`,
           rebalanceSignal: result.rebalanceSignal,
         }, null, 2),
       }],
