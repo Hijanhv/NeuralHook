@@ -401,9 +401,9 @@ Built for ETHGlobal Open Agents 2026. Every sponsor integration is load-bearing 
 
 | Sponsor | Track | NeuralHook Integration |
 | ------- | ----- | ---------------------- |
-| **0G** · $7,500 | Best Autonomous Agents, Swarms & iNFT Innovations | 3 long-running goal-driven agents form a persistent swarm; each maintains its own inference loop, gossips signed votes, and shares a clear goal — protect LPs from IL. Agent state is persisted to **0G Storage**; inference runs through **0G Sealed Inference** (TEE). |
-| **Uniswap Foundation** · $5,000 | Best Uniswap API Integration | On HIGH/CRITICAL consensus, agent-0 calls `POST /v1/quote` (Uniswap Trading API) to compute the optimal WETH → USDC rebalance swap with route, price impact, and gas estimate. Quote is attached to the consensus result and shown live on the dashboard. `FEEDBACK.md` documents the full integration experience. |
-| **Gensyn** · $5,000 | Best Application of Agent eXchange Layer (AXL) | Three agents gossip their signed IL-risk votes peer-to-peer over Gensyn AXL. No central coordinator — each agent publishes its vote and receives peers' votes through AXL transport. Falls back to HTTP gossip gracefully if AXL is unreachable. |
+| **0G** ·  | Best Autonomous Agents, Swarms & iNFT Innovations | 3 long-running goal-driven agents form a persistent swarm; each maintains its own inference loop, gossips signed votes, and shares a clear goal — protect LPs from IL. Agent state is persisted to **0G Storage**; inference runs through **0G Sealed Inference** (TEE). |
+| **Uniswap Foundation** · | Best Uniswap API Integration | On HIGH/CRITICAL consensus, agent-0 calls `POST /v1/quote` (Uniswap Trading API) to compute the optimal WETH → USDC rebalance swap with route, price impact, and gas estimate. Quote is attached to the consensus result and shown live on the dashboard. `FEEDBACK.md` documents the full integration experience. |
+| **Gensyn** ·  | Best Application of Agent eXchange Layer (AXL) | Three agents gossip their signed IL-risk votes peer-to-peer over Gensyn AXL. No central coordinator — each agent publishes its vote and receives peers' votes through AXL transport. Falls back to HTTP gossip gracefully if AXL is unreachable. |
 
 ### Why the integrations are non-cosmetic
 
