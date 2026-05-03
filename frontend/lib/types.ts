@@ -17,6 +17,20 @@ export interface Vote {
   timestamp: number
 }
 
+export interface RebalanceQuote {
+  chainId: number
+  tokenIn: string
+  tokenOut: string
+  amountIn: string
+  amountOut: string
+  priceETHUSD: number
+  route: string
+  priceImpactPct: number
+  gasFeeUSD: string
+  quoteId: string
+  fetchedAt: number
+}
+
 export interface ConsensusResult {
   ilRisk: ILRisk
   predictedILBps: number
@@ -27,6 +41,7 @@ export interface ConsensusResult {
   signature: string
   signerAgentId: string
   agreementCount: number
+  rebalanceQuote?: RebalanceQuote
 }
 
 export interface AgentStatus {

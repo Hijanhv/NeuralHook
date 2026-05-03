@@ -5,6 +5,7 @@ import { tryConsensus } from './consensus.js'
 import { triggerRebalance, getAuditLog, startRebalanceListener } from './keeperhub.js'
 import { initAXL, publishVote, isAxlActive } from './axl-gossip.js'
 import { fetchOnChainSqrtPrice } from './on-chain.js'
+import { getRebalanceQuote } from './uniswap-api.js'
 import {
   appendInferenceHistory, appendAuditEntry,
   saveAgentSnapshot, loadAgentSnapshot,
@@ -89,6 +90,13 @@ async function runLoop(): Promise<void> {
       // Only agent-0 submits on-chain — prevents nonce collisions when all agents
       // share the same PRIVATE_KEY and reach consensus at the same time.
       if (NODE_ID === '0') {
+        // When risk is HIGH/CRITICAL, fetch a Uniswap Trading API quote for the
+        // optimal rebalance swap so LPs know exactly what to do to cut IL exposure.
+        if (consensus.rebalanceSignal) {
+          const quote = await getRebalanceQuote()
+          if (quote) consensus.rebalanceQuote = quote
+        }
+
         const auditEntry = await triggerRebalance(consensus).catch(() => null)
         if (auditEntry) {
           appendAuditEntry(NODE_ID, auditEntry)
