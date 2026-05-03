@@ -86,10 +86,13 @@ async function runLoop(): Promise<void> {
       if (history.length > 100) history.shift()
       votes.clear()
 
-      const auditEntry = await triggerRebalance(consensus).catch(() => null)
-      if (auditEntry) {
-        // Persist audit entry to 0G Storage
-        appendAuditEntry(NODE_ID, auditEntry)
+      // Only agent-0 submits on-chain — prevents nonce collisions when all agents
+      // share the same PRIVATE_KEY and reach consensus at the same time.
+      if (NODE_ID === '0') {
+        const auditEntry = await triggerRebalance(consensus).catch(() => null)
+        if (auditEntry) {
+          appendAuditEntry(NODE_ID, auditEntry)
+        }
       }
     }
   } catch (e) {

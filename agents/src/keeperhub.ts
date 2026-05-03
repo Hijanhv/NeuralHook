@@ -100,7 +100,7 @@ export async function triggerRebalance(consensus: ConsensusResult): Promise<Audi
 
     entry.txHash  = tx.hash
     entry.success = true
-    console.log(`[keeperhub] tx broadcast: ${tx.hash} (${consensus.ilRisk} → ${(consensus.recommendedFee / 100).toFixed(2)}% fee)`)
+    console.log(`[keeperhub] tx broadcast: ${tx.hash} (${consensus.ilRisk} → ${(consensus.recommendedFee / 10000).toFixed(2)}% fee)`)
 
     tx.wait(1).then(receipt => {
       if (receipt) {
@@ -123,22 +123,35 @@ export async function triggerRebalance(consensus: ConsensusResult): Promise<Audi
   return entry
 }
 
-// Watch for InferenceUpdated events with rebalanceSignal=true and log them.
-// The agent loop already calls triggerRebalance after consensus — this listener
-// provides an independent on-chain confirmation that the fee update landed.
+const HOOK_READ_ABI = [
+  'function lastUpdateTimestamp() view returns (uint256)',
+  'function currentFee() view returns (uint24)',
+  'function currentRisk() view returns (uint8)',
+]
+
+// Poll for on-chain state changes — Unichain Sepolia public RPC does not support
+// eth_newFilter, so event subscriptions fail. Polling every 30s is sufficient.
 export function startRebalanceListener(): void {
   const provider = new ethers.JsonRpcProvider(RPC_URL)
-  const hook     = new ethers.Contract(HOOK_ADDR, HOOK_ABI, provider)
+  const hook     = new ethers.Contract(HOOK_ADDR, HOOK_READ_ABI, provider)
 
-  hook.on('InferenceUpdated', (ilRisk: number, fee: number, rebalanceSignal: boolean, timestamp: bigint) => {
-    if (rebalanceSignal) {
-      console.log(
-        `[keeperhub] RebalanceSignal on-chain ✓ — ilRisk=${ilRisk} fee=${fee / 100}bps ts=${timestamp}`,
-      )
-    }
-  })
+  let lastSeen = 0n
 
-  console.log(`[keeperhub] listening for InferenceUpdated events on ${HOOK_ADDR}`)
+  const poll = async () => {
+    try {
+      const ts: bigint = await hook.lastUpdateTimestamp()
+      if (ts > lastSeen && ts > 0n) {
+        const fee:  number = await hook.currentFee()
+        const risk: number = await hook.currentRisk()
+        console.log(`[keeperhub] on-chain state updated ✓ — risk=${risk} fee=${(fee / 10000).toFixed(2)}% ts=${ts}`)
+        lastSeen = ts
+      }
+    } catch { /* RPC transient error, ignore */ }
+  }
+
+  setInterval(() => void poll(), 30_000)
+  void poll()
+  console.log(`[keeperhub] polling ${HOOK_ADDR} for state updates every 30s`)
 }
 
 export function getAuditLog(): AuditEntry[] {
