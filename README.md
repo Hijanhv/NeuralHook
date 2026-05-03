@@ -240,7 +240,7 @@ cd NeuralHook
 
 ```bash
 cd agents
-npm install
+npm install   # .npmrc sets legacy-peer-deps automatically
 cp .env.example .env
 ```
 
