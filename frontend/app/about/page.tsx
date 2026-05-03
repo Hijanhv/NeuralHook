@@ -178,6 +178,124 @@ export default function AboutPage() {
           </section>
         ))}
 
+        {/* Run locally */}
+        <section>
+          <div className="flex items-start gap-6 mb-6">
+            <span className="font-mono text-4xl font-bold leading-none" style={{ color: 'var(--text-muted)' }}>05</span>
+            <div>
+              <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.625rem', color: 'var(--text)' }}>Run it locally</h2>
+              <p className="font-mono text-xs uppercase tracking-widest mt-1" style={{ color: 'var(--text-muted)' }}>Node.js 18+ · Foundry · 3 terminals</p>
+            </div>
+          </div>
+
+          <div className="pl-[4.5rem] space-y-6">
+            {/* Prerequisites */}
+            <div>
+              <p className="font-mono text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>Prerequisites</p>
+              <div style={{ border: '1px solid var(--border)', borderRadius: '4px' }}>
+                {[
+                  ['Node.js', '18 or later — node --version'],
+                  ['Foundry', 'curl -L https://foundry.paradigm.xyz | bash'],
+                  ['Git', 'git clone https://github.com/Hijanhv/NeuralHook'],
+                ].map(([k, v], i, arr) => (
+                  <div key={k} className="grid px-4 py-2" style={{ gridTemplateColumns: '9rem 1fr', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <span className="font-mono text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{k}</span>
+                    <code className="font-mono text-xs" style={{ color: 'var(--text)' }}>{v}</code>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Steps */}
+            {[
+              {
+                step: '1', label: 'Clone and install',
+                lines: [
+                  'git clone https://github.com/Hijanhv/NeuralHook',
+                  'cd NeuralHook',
+                  'cd agents && npm install && cd ..',
+                  'cd frontend && npm install && cd ..',
+                ],
+              },
+              {
+                step: '2', label: 'Configure agents',
+                lines: [
+                  'cd agents',
+                  'cp .env.example .env   # or create .env manually',
+                  '',
+                  '# Minimum required in agents/.env:',
+                  'HOOK_ADDRESS=0x6DCb771F0A8A61F2679989453af9549C9ceA89c0',
+                  'RPC_URL=https://unichain-sepolia-rpc.publicnode.com',
+                  'CHAIN_ID=1301',
+                  'PRIVATE_KEY=<your-wallet-private-key>',
+                  'ORACLE_PRIVATE_KEY=<same-key>',
+                ],
+              },
+              {
+                step: '3', label: 'Start the agents (terminal 1)',
+                lines: [
+                  'cd agents',
+                  'npm start',
+                  '',
+                  '# Starts 3 agents on :4000 :4001 :4002',
+                  '# Wait for: [agent-0] simulation passed — broadcasting',
+                ],
+              },
+              {
+                step: '4', label: 'Start the frontend (terminal 2)',
+                lines: [
+                  'cd frontend',
+                  '',
+                  '# Create frontend/.env.local:',
+                  'NEXT_PUBLIC_HOOK_ADDRESS=0x6DCb771F0A8A61F2679989453af9549C9ceA89c0',
+                  'NEXT_PUBLIC_FUND_ADDRESS=0x4D575ac6C3df76C7E22EB59715F0a9e839f16811',
+                  'NEXT_PUBLIC_AGENT_0=http://localhost:4000',
+                  'NEXT_PUBLIC_AGENT_1=http://localhost:4001',
+                  'NEXT_PUBLIC_AGENT_2=http://localhost:4002',
+                  '',
+                  'npm run dev -- --port 3001',
+                ],
+              },
+              {
+                step: '5', label: 'Open the dashboard',
+                lines: [
+                  'http://localhost:3001/dashboard',
+                  '',
+                  '# You should see:',
+                  '# • Data source: live agents',
+                  '# • Agent mesh: 3 nodes healthy',
+                  '# • Consensus feed updating every 30s',
+                  '# • On-chain state: fee + risk from NeuralHook.sol',
+                ],
+              },
+            ].map(({ step, label, lines }) => (
+              <div key={step}>
+                <p className="font-mono text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
+                  Step {step} — {label}
+                </p>
+                <div style={{ background: 'var(--bg-dark)', borderRadius: '4px', padding: '1rem 1.25rem' }}>
+                  {lines.map((line, i) => (
+                    <div key={i} className="font-mono text-xs leading-6" style={{ color: line.startsWith('#') ? 'rgba(249,248,245,0.4)' : line === '' ? undefined : '#22C55E' }}>
+                      {line === '' ? <br /> : line}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div style={{ border: '1px solid var(--border)', borderRadius: '4px', padding: '1rem 1.25rem' }}>
+              <p className="font-mono text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Note — wallet funding</p>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-mid)', lineHeight: 1.6 }}>
+                The oracle wallet needs a small amount of Unichain Sepolia ETH to pay gas for on-chain submissions (~41k gas per round).
+                Get testnet ETH from the{' '}
+                <a href="https://faucet.unichain.org" target="_blank" rel="noopener noreferrer"
+                   className="underline" style={{ color: 'var(--text)' }}>Unichain faucet</a>
+                {' '}or bridge from Sepolia. 0.05 ETH covers hundreds of submissions.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* ETHGlobal footer */}
         <div style={{ border: '1px solid var(--border)', borderRadius: '6px', padding: '1.5rem 2rem' }}>
           <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.125rem', color: 'var(--text)', marginBottom: '0.75rem' }}>
