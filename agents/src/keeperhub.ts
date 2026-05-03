@@ -13,14 +13,23 @@ const HOOK_ABI = [
   'event InferenceUpdated(uint8 ilRisk, uint24 fee, bool rebalanceSignal, uint256 timestamp)',
 ]
 
-// Unichain Sepolia (OP Stack): blocks every ~1s, low priority fee near zero.
-const GAS_OVERRIDES = {
-  maxFeePerGas:         ethers.parseUnits('0.1', 'gwei'),
-  maxPriorityFeePerGas: ethers.parseUnits('0.05', 'gwei'),
-  gasLimit:             300_000n,
-}
+// Gas limit for submitConsensusResult (updates 3 storage slots + emits 1 event).
+const GAS_LIMIT = 120_000n
 
 const auditLog: AuditEntry[] = []
+
+// Fetch current network fees and add a 2x buffer so the tx is accepted even
+// when the base fee spikes slightly between estimation and inclusion.
+async function networkFees(provider: ethers.JsonRpcProvider) {
+  const fees = await provider.getFeeData()
+  const base = fees.maxFeePerGas ?? ethers.parseUnits('0.002', 'gwei')
+  const tip  = fees.maxPriorityFeePerGas ?? ethers.parseUnits('0.001', 'gwei')
+  return {
+    maxFeePerGas:         base * 2n,
+    maxPriorityFeePerGas: tip  * 2n,
+    gasLimit:             GAS_LIMIT,
+  }
+}
 
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
@@ -31,13 +40,6 @@ async function retryWithBackoff<T>(
   for (let i = 0; i < maxAttempts; i++) {
     try { return await fn() } catch (e) {
       lastErr = e
-      const isUnderprice = String(e).includes('REPLACEMENT_UNDERPRICED')
-      if (isUnderprice) {
-        GAS_OVERRIDES.maxFeePerGas         = GAS_OVERRIDES.maxFeePerGas * 12n / 10n
-        GAS_OVERRIDES.maxPriorityFeePerGas = GAS_OVERRIDES.maxPriorityFeePerGas * 12n / 10n
-        i--
-        continue
-      }
       if (i < maxAttempts - 1) await new Promise(r => setTimeout(r, baseDelayMs * 2 ** i))
     }
   }
@@ -84,6 +86,7 @@ export async function triggerRebalance(consensus: ConsensusResult): Promise<Audi
     await simulate(provider, wallet, hook, consensus)
     console.log(`[keeperhub] simulation passed — broadcasting`)
 
+    const fees = await networkFees(provider)
     const tx: ethers.TransactionResponse = await retryWithBackoff(() =>
       hook.submitConsensusResult(
         consensus.resultHash,
@@ -94,7 +97,7 @@ export async function triggerRebalance(consensus: ConsensusResult): Promise<Audi
         consensus.yieldScore,
         BigInt(consensus.timestamp),
         consensus.signature,
-        GAS_OVERRIDES,
+        fees,
       )
     )
 
