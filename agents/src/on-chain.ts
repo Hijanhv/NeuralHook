@@ -14,11 +14,9 @@ const EXTSLOAD_ABI = [
 ]
 
 // sqrtPriceX96 bounds for $50–$50,000 ETH with token0=ETH(18dec), token1=USDC(6dec)
-// price_raw = sq^2/q96^2; ethPrice = price_raw * 1e12
-// sq_min = sqrt(50/1e12) * q96 ≈ 7.07e18
-// sq_max = sqrt(50000/1e12) * q96 ≈ 2.24e26
-const SQ_MIN = 7_071_067_811_865_475n          // ETH ≈ $50
-const SQ_MAX = 223_606_797_749_978_969_640_917n // ETH ≈ $50,000
+// Derived: sq = sqrt(price_raw) * 2^96, price_raw = ethUSD * 1e6 / 1e18
+const SQ_MIN =    560_227_709_747_861_399_187_319n  // ETH ≈ $50
+const SQ_MAX = 17_715_955_711_429_571_029_610_171n  // ETH ≈ $50,000
 
 let _provider: ethers.JsonRpcProvider | null = null
 function provider() {
