@@ -10,6 +10,7 @@ import LPPositions from '@/components/LPPositions'
 import AuditTrail from '@/components/AuditTrail'
 import PoolStats from '@/components/PoolStats'
 import PriceChart from '@/components/PriceChart'
+import CryptoProof from '@/components/CryptoProof'
 import {
   useAgentStatuses, useAgentHistory, useAuditLog,
   useTriggerVolatility, useDerivedStats, useOnChainHookState,
@@ -130,6 +131,33 @@ export default function DashboardPage() {
         <div className="grid md:grid-cols-2 gap-4">
           <LPPositions walletPos={walletPos} />
           <AuditTrail entries={auditLog} />
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <CryptoProof
+            lastConsensus={liveHistory.length ? liveHistory[liveHistory.length - 1] : null}
+            lastUpdate={chain.lastUpdate}
+          />
+          <div className="card p-5 flex flex-col gap-3">
+            <span className="font-mono text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Trust Architecture</span>
+            <div className="space-y-2 flex-1">
+              {[
+                { label: 'TEE Signed', desc: 'AI output signed inside 0G hardware enclave before leaving the model', ok: true },
+                { label: '2-of-3 Consensus', desc: 'Three Gensyn AXL agents must agree on the same risk class', ok: true },
+                { label: 'eth_call Simulated', desc: 'Every tx simulated before broadcast — reverts never reach the chain', ok: true },
+                { label: 'ECDSA Verified', desc: 'NeuralHook.sol recovers signer on every swap — wrong sig reverts', ok: true },
+                { label: 'No Admin Override', desc: 'No owner key can bypass signature verification or change fees directly', ok: true },
+              ].map(({ label, desc, ok }) => (
+                <div key={label} className="flex items-start gap-3">
+                  <span className="font-mono text-xs mt-0.5 flex-shrink-0" style={{ color: ok ? '#22C55E' : 'var(--border-mid)' }}>✓</span>
+                  <div>
+                    <div className="font-mono text-xs" style={{ color: 'var(--text)' }}>{label}</div>
+                    <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <p className="font-mono text-xs text-center pb-4" style={{ color: 'var(--text-muted)' }}>

@@ -184,7 +184,7 @@ export default function AboutPage() {
             <span className="font-mono text-4xl font-bold leading-none" style={{ color: 'var(--text-muted)' }}>05</span>
             <div>
               <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.625rem', color: 'var(--text)' }}>Run it locally</h2>
-              <p className="font-mono text-xs uppercase tracking-widest mt-1" style={{ color: 'var(--text-muted)' }}>Node.js 18+ · Foundry · 3 terminals</p>
+              <p className="font-mono text-xs uppercase tracking-widest mt-1" style={{ color: 'var(--text-muted)' }}>Node.js 18+ · 2 terminals · contracts already deployed</p>
             </div>
           </div>
 
@@ -194,9 +194,9 @@ export default function AboutPage() {
               <p className="font-mono text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>Prerequisites</p>
               <div style={{ border: '1px solid var(--border)', borderRadius: '4px' }}>
                 {[
-                  ['Node.js', '18 or later — node --version'],
-                  ['Foundry', 'curl -L https://foundry.paradigm.xyz | bash'],
-                  ['Git', 'git clone https://github.com/Hijanhv/NeuralHook'],
+                  ['Node.js', '18 or later — check with: node --version'],
+                  ['Git', 'Any recent version'],
+                  ['Wallet', 'A private key with Unichain Sepolia ETH for gas'],
                 ].map(([k, v], i, arr) => (
                   <div key={k} className="grid px-4 py-2" style={{ gridTemplateColumns: '9rem 1fr', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
                     <span className="font-mono text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{k}</span>
@@ -210,6 +210,7 @@ export default function AboutPage() {
             {[
               {
                 step: '1', label: 'Clone and install',
+                note: 'The agents/ directory includes an .npmrc that resolves peer dependency conflicts automatically — npm install should complete without any flags.',
                 lines: [
                   'git clone https://github.com/Hijanhv/NeuralHook',
                   'cd NeuralHook',
@@ -219,45 +220,41 @@ export default function AboutPage() {
               },
               {
                 step: '2', label: 'Configure agents',
+                note: 'The .env.example already has the deployed contract addresses and RPC URL pre-filled. You only need to add your wallet private key.',
                 lines: [
                   'cd agents',
-                  'cp .env.example .env   # or create .env manually',
+                  'cp .env.example .env',
                   '',
-                  '# Minimum required in agents/.env:',
-                  'HOOK_ADDRESS=0x6DCb771F0A8A61F2679989453af9549C9ceA89c0',
-                  'RPC_URL=https://unichain-sepolia-rpc.publicnode.com',
-                  'CHAIN_ID=1301',
-                  'PRIVATE_KEY=<your-wallet-private-key>',
-                  'ORACLE_PRIVATE_KEY=<same-key>',
+                  '# Edit .env — only these two lines need filling in:',
+                  'PRIVATE_KEY=0x<your-wallet-private-key>',
+                  'ORACLE_PRIVATE_KEY=0x<same-key-is-fine>',
+                  '',
+                  '# Everything else (addresses, RPC, chain ID) is pre-filled',
                 ],
               },
               {
                 step: '3', label: 'Start the agents (terminal 1)',
+                note: null,
                 lines: [
                   'cd agents',
                   'npm start',
                   '',
                   '# Starts 3 agents on :4000 :4001 :4002',
-                  '# Wait for: [agent-0] simulation passed — broadcasting',
+                  '# Look for: [agent-0] simulation passed — broadcasting',
                 ],
               },
               {
                 step: '4', label: 'Start the frontend (terminal 2)',
+                note: 'Copy the frontend env file then start the dev server. The frontend reads live agent data and on-chain state automatically.',
                 lines: [
                   'cd frontend',
-                  '',
-                  '# Create frontend/.env.local:',
-                  'NEXT_PUBLIC_HOOK_ADDRESS=0x6DCb771F0A8A61F2679989453af9549C9ceA89c0',
-                  'NEXT_PUBLIC_FUND_ADDRESS=0x4D575ac6C3df76C7E22EB59715F0a9e839f16811',
-                  'NEXT_PUBLIC_AGENT_0=http://localhost:4000',
-                  'NEXT_PUBLIC_AGENT_1=http://localhost:4001',
-                  'NEXT_PUBLIC_AGENT_2=http://localhost:4002',
-                  '',
+                  'cp .env.local.example .env.local',
                   'npm run dev -- --port 3001',
                 ],
               },
               {
                 step: '5', label: 'Open the dashboard',
+                note: null,
                 lines: [
                   'http://localhost:3001/dashboard',
                   '',
@@ -265,14 +262,17 @@ export default function AboutPage() {
                   '# • Data source: live agents',
                   '# • Agent mesh: 3 nodes healthy',
                   '# • Consensus feed updating every 30s',
-                  '# • On-chain state: fee + risk from NeuralHook.sol',
+                  '# • Cryptographic Proof panel: signature + oracle address',
                 ],
               },
-            ].map(({ step, label, lines }) => (
+            ].map(({ step, label, note, lines }) => (
               <div key={step}>
                 <p className="font-mono text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
                   Step {step} — {label}
                 </p>
+                {note && (
+                  <p className="font-mono text-xs mb-2 leading-5" style={{ color: 'var(--text-muted)', opacity: 0.75 }}>{note}</p>
+                )}
                 <div style={{ background: 'var(--bg-dark)', borderRadius: '4px', padding: '1rem 1.25rem' }}>
                   {lines.map((line, i) => (
                     <div key={i} className="font-mono text-xs leading-6" style={{ color: line.startsWith('#') ? 'rgba(249,248,245,0.4)' : line === '' ? undefined : '#22C55E' }}>
