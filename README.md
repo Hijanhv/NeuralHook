@@ -2,7 +2,7 @@
 
 **AI-powered impermanent loss protection for Uniswap v4 LPs — live on Unichain Sepolia.**
 
-NeuralHook is a Uniswap v4 hook that uses a three-node AI agent network to predict impermanent loss risk before it happens. When risk rises, the pool fee surges automatically to compensate LPs. Every fee change is cryptographically signed by the inference layer and verified atomically on-chain — the AI cannot hallucinate a fee.
+NeuralHook is a Uniswap v4 hook that uses a three-node AI agent network to predict impermanent loss risk before it happens. When risk rises, the pool fee surges automatically to compensate LPs. Every fee change is cryptographically signed by the inference layer and verified atomically on-chain — the AI cannot hallucinate a fee. When risk reaches CRITICAL, agents query the Uniswap Trading API to surface the optimal rebalance swap so LPs know exactly what to do.
 
 🎥 **[Watch the demo](https://youtu.be/rY4npbPU5bQ?si=KO4Gj0y8LV0OzR7H)** · 🏆 **[ETHGlobal Showcase](https://ethglobal.com/showcase/neuralhook-8gxzp)**
 
@@ -45,12 +45,16 @@ flowchart TD
     OG -->|"ILRisk + fee + ECDSA sig"| Agents
 
     Agents -->|"2-of-3 consensus · agent-0 submits"| KH["KeeperHub MCP\n(eth_call simulate → broadcast)"]
+
+    A0 -->|"HIGH / CRITICAL → get quote"| UNI["Uniswap Trading API\n(WETH → USDC · optimal route)"]
+    UNI -->|"price · route · impact · gas"| A0
+
     KH -->|submitConsensusResult| Hook["NeuralHook.sol\n(ECDSA.recover → currentFee override)"]
     Hook -->|fee applied per swap| PM
     Hook --- Fund["ILInsuranceFund.sol\n(ETH reserve · 10% cap per claim)"]
 ```
 
-Four layers — remove any one and the system stops working.
+Five layers — remove any one and the system stops working.
 
 ---
 
@@ -105,6 +109,7 @@ Each agent runs a **30-second inference loop**:
   * tick proximity
   * 5-period momentum
 * Calls 0G Sealed Inference (TEE) or local heuristic fallback
+* Agent snapshots and inference history are persisted to **0G Storage**
 * Outputs:
 
 ```text
@@ -147,7 +152,7 @@ The signature is produced inside the TEE before the result leaves the model.
 
 ## 3️⃣ Agent Consensus (Gensyn AXL)
 
-Three TypeScript agents (ports **4000 / 4001 / 4002**) each run inference independently, then gossip their signed vote to the other two via Gensyn AXL HTTP transport.
+Three TypeScript agents (ports **4000 / 4001 / 4002**) each run inference independently, then gossip their signed vote to the other two via Gensyn AXL P2P transport.
 
 * **Threshold:** 2-of-3 matching `ilRisk`
 * **Tie-break:** higher risk wins
@@ -155,9 +160,28 @@ Three TypeScript agents (ports **4000 / 4001 / 4002**) each run inference indepe
 
 Prevents nonce collisions when agents share one oracle key.
 
+Each agent is a long-running autonomous process with its own inference loop, persistent state, and a clearly defined goal — protect LPs from impermanent loss. The three-node swarm reaches consensus before any action is taken on-chain.
+
 ---
 
-## 4️⃣ KeeperHub Execution
+## 4️⃣ Uniswap Trading API — Rebalance Quotes
+
+When the swarm reaches **HIGH** or **CRITICAL** consensus, agent-0 calls the Uniswap Trading API (`POST /v1/quote`) to compute the optimal WETH → USDC swap:
+
+```text
+GET current ETH/USDC quote via Uniswap routing
+→ best route across v3 + v4 pools
+→ price impact, gas estimate, route string
+→ attached to consensus result → surfaced on dashboard
+```
+
+This closes the loop for the LP: the system detects rising IL, raises the pool fee to compensate, **and** tells the LP exactly what swap to execute to reduce their exposure — with the optimal route already calculated.
+
+The quote is shown inline in the Consensus Feed on the dashboard. A `FEEDBACK.md` at the repo root documents the full integration experience.
+
+---
+
+## 5️⃣ KeeperHub Execution
 
 Before broadcasting every transaction, KeeperHub calls:
 
@@ -202,21 +226,24 @@ NeuralHook/
 │
 ├── agents/
 │   └── src/
-│       ├── agent.ts
-│       ├── og-inference.ts
-│       ├── il-calculator.ts
-│       ├── consensus.ts
-│       ├── keeperhub.ts
-│       ├── on-chain.ts
-│       ├── axl-gossip.ts
-│       └── og-storage.ts
+│       ├── agent.ts            ← inference loop + AXL gossip + consensus
+│       ├── og-inference.ts     ← 0G Sealed Inference (TEE)
+│       ├── uniswap-api.ts      ← Uniswap Trading API rebalance quotes
+│       ├── il-calculator.ts    ← volatility / momentum / IL math
+│       ├── consensus.ts        ← 2-of-3 vote aggregation
+│       ├── keeperhub.ts        ← eth_call simulation + broadcast
+│       ├── on-chain.ts         ← sqrtPriceX96 via extsload
+│       ├── axl-gossip.ts       ← Gensyn AXL P2P transport
+│       └── og-storage.ts       ← 0G Storage persistence
 │
-└── frontend/
-    ├── app/
-    │   ├── page.tsx
-    │   ├── dashboard/page.tsx
-    │   └── about/page.tsx
-    └── components/
+├── frontend/
+│   ├── app/
+│   │   ├── page.tsx
+│   │   ├── dashboard/page.tsx
+│   │   └── about/page.tsx
+│   └── components/
+│
+└── FEEDBACK.md                 ← Uniswap API integration feedback (prize requirement)
 ```
 
 ---
@@ -258,6 +285,8 @@ CHAIN_ID=1301
 ```
 
 > Both `PRIVATE_KEY` and `ORACLE_PRIVATE_KEY` can be the same wallet for local testing.
+>
+> `UNISWAP_API_KEY` is optional — agents work without it but rebalance quotes will be skipped. Get a free key at [hub.uniswap.org](https://hub.uniswap.org).
 
 ### Step 3 — Start agents
 
@@ -265,14 +294,14 @@ CHAIN_ID=1301
 npm start
 ```
 
-This starts three agents on `:4000`, `:4001`, `:4002`. Each runs its own inference loop, gossips votes with the others, and agent-0 submits consensus results on-chain every ~30 seconds.
+This starts three agents on `:4000`, `:4001`, `:4002`. Each runs its own inference loop, gossips votes with the others, and agent-0 submits consensus results on-chain every ~30 seconds. On HIGH/CRITICAL consensus, agent-0 also fetches a Uniswap Trading API rebalance quote.
 
 Agent API endpoints (once running):
 
 | Endpoint | Description |
 |---|---|
 | `GET /status` | Agent health + stats |
-| `GET /history` | Consensus round history |
+| `GET /history` | Consensus round history (includes rebalance quotes) |
 | `GET /audit-log` | Full on-chain submission log |
 | `POST /trigger-volatility` | Force a high-volatility inference round |
 
@@ -313,13 +342,15 @@ Then update `HOOK_ADDRESS` and `FUND_ADDRESS` in `agents/.env` and `frontend/.en
 
 ## 🔄 Data Flow
 
-1. `on-chain.ts` reads `sqrtPriceX96`
-2. `il-calculator.ts` computes volatility + momentum
-3. `og-inference.ts` gets signed result
-4. `consensus.ts` reaches 2-of-3 agreement
-5. `keeperhub.ts` simulates + broadcasts
-6. `NeuralHook.sol` verifies signature
-7. Next swap uses new fee automatically
+1. `on-chain.ts` reads `sqrtPriceX96` from Unichain Sepolia via `extsload`
+2. `il-calculator.ts` computes rolling volatility, tick proximity, momentum
+3. `og-inference.ts` calls 0G Sealed Inference (TEE) → gets signed IL risk result
+4. `axl-gossip.ts` gossips signed vote to peer agents via Gensyn AXL
+5. `consensus.ts` reaches 2-of-3 agreement on IL risk class
+6. If HIGH/CRITICAL: `uniswap-api.ts` fetches optimal rebalance quote from Uniswap Trading API
+7. `keeperhub.ts` simulates tx via `eth_call` → broadcasts if simulation passes
+8. `NeuralHook.sol` verifies ECDSA signature → updates `currentFee`
+9. Next swap uses the new fee automatically
 
 ---
 
@@ -336,7 +367,7 @@ Then update `HOOK_ADDRESS` and `FUND_ADDRESS` in `agents/.env` and `frontend/.en
 
 * 2-of-3 consensus
 * `eth_call` simulation
-* Single submitter
+* Single submitter (agent-0 only)
 
 ### System Does NOT Do
 
@@ -348,31 +379,39 @@ Then update `HOOK_ADDRESS` and `FUND_ADDRESS` in `agents/.env` and `frontend/.en
 
 ## 🧰 Tech Stack
 
-| Layer              | Technology                   |
-| ------------------ | ---------------------------- |
-| Hook protocol      | Uniswap v4                   |
-| Smart contracts    | Solidity 0.8.26 + Foundry    |
-| AI inference       | 0G Sealed Inference          |
-| Agent consensus    | Gensyn AXL                   |
-| On-chain execution | KeeperHub MCP + ethers.js v6 |
-| Persistence        | 0G Storage                   |
-| L2 deployment      | Unichain                     |
-| Frontend           | Next.js 14 + wagmi + viem    |
+| Layer              | Technology                         |
+| ------------------ | ---------------------------------- |
+| Hook protocol      | Uniswap v4 (dynamic fee hook)      |
+| Swap quotes        | Uniswap Trading API (`/v1/quote`)  |
+| Smart contracts    | Solidity 0.8.26 + Foundry          |
+| AI inference       | 0G Sealed Inference (TEE)          |
+| Agent persistence  | 0G Storage                         |
+| Agent consensus    | Gensyn AXL (P2P gossip)            |
+| On-chain execution | KeeperHub MCP + ethers.js v6       |
+| L2 deployment      | Unichain Sepolia (chain 1301)      |
+| Frontend           | Next.js 14 + wagmi + viem          |
 
 ---
 
 ## 🏆 ETHGlobal Open Agents 2026
 
-Built for ETHGlobal Open Agents 2026.
+Built for ETHGlobal Open Agents 2026. Every sponsor integration is load-bearing — the system does not work if any layer is removed.
 
-Each sponsor track is load-bearing infrastructure.
+### Prize Tracks
 
-| Track      | Integration                     |
-| ---------- | ------------------------------- |
-| Uniswap v4 | Dynamic fee hook + IL insurance |
-| 0G Network | Sealed inference + storage      |
-| Gensyn     | 3-node consensus mesh           |
-| KeeperHub  | Simulated transaction execution |
+| Sponsor | Track | NeuralHook Integration |
+| ------- | ----- | ---------------------- |
+| **0G** · $7,500 | Best Autonomous Agents, Swarms & iNFT Innovations | 3 long-running goal-driven agents form a persistent swarm; each maintains its own inference loop, gossips signed votes, and shares a clear goal — protect LPs from IL. Agent state is persisted to **0G Storage**; inference runs through **0G Sealed Inference** (TEE). |
+| **Uniswap Foundation** · $5,000 | Best Uniswap API Integration | On HIGH/CRITICAL consensus, agent-0 calls `POST /v1/quote` (Uniswap Trading API) to compute the optimal WETH → USDC rebalance swap with route, price impact, and gas estimate. Quote is attached to the consensus result and shown live on the dashboard. `FEEDBACK.md` documents the full integration experience. |
+| **Gensyn** · $5,000 | Best Application of Agent eXchange Layer (AXL) | Three agents gossip their signed IL-risk votes peer-to-peer over Gensyn AXL. No central coordinator — each agent publishes its vote and receives peers' votes through AXL transport. Falls back to HTTP gossip gracefully if AXL is unreachable. |
+
+### Why the integrations are non-cosmetic
+
+**0G** — inference and storage are in the hot path. Every 30-second consensus round calls 0G Sealed Inference (or falls back to local heuristic if the TEE is unreachable) and writes the result to 0G Storage. The TEE signature is what prevents the AI from hallucinating a fee.
+
+**Uniswap Trading API** — the quote call runs inside the consensus loop, not as a side effect. The result is attached to the consensus payload that the frontend reads, so the LP sees both the new fee and the exact swap they should execute in the same update.
+
+**Gensyn AXL** — the gossip layer is what makes 2-of-3 consensus possible without a central server. Each agent is a genuinely independent process; AXL is the only channel through which they coordinate.
 
 ---
 
