@@ -20,6 +20,14 @@ NeuralHook is a Uniswap v4 hook that uses a three-node AI agent network to predi
 **Chain ID:** 1301
 **Explorer:** https://sepolia.uniscan.xyz
 
+### Agent Wallet (swap execution)
+
+| Role | Address | Network |
+| ---- | ------- | ------- |
+| **Agent-0 executor** | `0xa8bcD8ca1561C3F4716490157B74Aa7FfFB9b58C` | Base mainnet |
+
+Agent-0 autonomously submits `submitConsensusResult` on Unichain Sepolia and executes WETH → USDC rebalance swaps on Base mainnet via the Uniswap Trading API. Verify swap activity: [Basescan](https://basescan.org/address/0xa8bcD8ca1561C3F4716490157B74Aa7FfFB9b58C)
+
 ---
 
 ## 🏗️ Architecture
