@@ -58,12 +58,28 @@ export default function ConsensusFeed({ history }: Props) {
                 </div>
               </div>
               {r.rebalanceQuote && (
-                <div className="pb-2 pl-1 font-mono text-[10px] flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+                <div className="pb-1 pl-1 font-mono text-[10px] flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
                   <span style={{ color: '#F59E0B' }}>↻</span>
                   <span>
                     Uniswap quote: 1 ETH → ${r.rebalanceQuote.priceETHUSD.toFixed(0)} USDC
                     {r.rebalanceQuote.priceImpactPct > 0 && ` · ${r.rebalanceQuote.priceImpactPct.toFixed(3)}% impact`}
                     {' · '}<span style={{ opacity: 0.6 }}>{r.rebalanceQuote.route.split(' ')[0]}</span>
+                  </span>
+                </div>
+              )}
+              {r.swapExecution && (
+                <div className="pb-2 pl-1 font-mono text-[10px] flex items-center gap-2" style={{ color: '#22C55E' }}>
+                  <span>✓</span>
+                  <span>
+                    Swap executed on-chain ·{' '}
+                    <a
+                      href={`https://${r.swapExecution.chainId === 8453 ? 'basescan.org' : 'etherscan.io'}/tx/${r.swapExecution.txHash}`}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ textDecoration: 'underline', color: '#22C55E' }}
+                    >
+                      {r.swapExecution.txHash.slice(0, 10)}…
+                    </a>
+                    {' '}· {Number(r.swapExecution.amountInWei) / 1e18} ETH
                   </span>
                 </div>
               )}

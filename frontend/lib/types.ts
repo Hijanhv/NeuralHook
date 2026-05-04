@@ -31,6 +31,13 @@ export interface RebalanceQuote {
   fetchedAt: number
 }
 
+export interface SwapExecution {
+  txHash: string
+  chainId: number
+  amountInWei: string
+  executedAt: number
+}
+
 export interface ConsensusResult {
   ilRisk: ILRisk
   predictedILBps: number
@@ -42,6 +49,7 @@ export interface ConsensusResult {
   signerAgentId: string
   agreementCount: number
   rebalanceQuote?: RebalanceQuote
+  swapExecution?: SwapExecution
 }
 
 export interface AgentStatus {

@@ -34,10 +34,18 @@ export interface RebalanceQuote {
   fetchedAt: number
 }
 
+export interface SwapExecution {
+  txHash: string
+  chainId: number
+  amountInWei: string
+  executedAt: number
+}
+
 export interface ConsensusResult extends InferenceResult {
   signerAgentId: string
   agreementCount: number
   rebalanceQuote?: RebalanceQuote
+  swapExecution?: SwapExecution
 }
 
 export interface AgentStatus {
