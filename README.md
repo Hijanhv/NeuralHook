@@ -2,7 +2,7 @@
 
 **AI-powered impermanent loss protection for Uniswap v4 LPs — live on Unichain Sepolia.**
 
-NeuralHook is a Uniswap v4 hook that uses a three-node AI agent network to predict impermanent loss risk before it happens. When risk rises, the pool fee surges automatically to compensate LPs. Every fee change is cryptographically signed by the inference layer and verified atomically on-chain — the AI cannot hallucinate a fee. When risk reaches CRITICAL, agents query the Uniswap Trading API to surface the optimal rebalance swap so LPs know exactly what to do.
+NeuralHook is a Uniswap v4 hook that uses a three-node AI agent network to predict impermanent loss risk before it happens. When risk rises, the pool fee surges automatically to compensate LPs. Every fee change is cryptographically signed by the inference layer and verified atomically on-chain — the AI cannot hallucinate a fee. When risk reaches HIGH or CRITICAL, agents call the Uniswap Trading API to get the optimal route, then autonomously execute a protective WETH → USDC rebalance swap on Base — closing the full protect → rebalance loop without human intervention.
 
 🎥 **[Watch the demo](https://youtu.be/rY4npbPU5bQ?si=KO4Gj0y8LV0OzR7H)** · 🏆 **[ETHGlobal Showcase](https://ethglobal.com/showcase/neuralhook-8gxzp)**
 
@@ -46,15 +46,15 @@ flowchart TD
 
     Agents -->|"2-of-3 consensus · agent-0 submits"| KH["KeeperHub MCP\n(eth_call simulate → broadcast)"]
 
-    A0 -->|"HIGH / CRITICAL → get quote"| UNI["Uniswap Trading API\n(WETH → USDC · optimal route)"]
-    UNI -->|"price · route · impact · gas"| A0
+    A0 -->|"HIGH/CRITICAL: /v1/quote + /v1/swap"| UNI["Uniswap Trading API\n(route · calldata · price impact)"]
+    UNI -->|"Universal Router calldata"| BASE["Base Mainnet\n(rebalance swap TX · Basescan)"]
 
     KH -->|submitConsensusResult| Hook["NeuralHook.sol\n(ECDSA.recover → currentFee override)"]
     Hook -->|fee applied per swap| PM
     Hook --- Fund["ILInsuranceFund.sol\n(ETH reserve · 10% cap per claim)"]
 ```
 
-Five layers — remove any one and the system stops working.
+Six layers — remove any one and the system stops working.
 
 ---
 
@@ -164,20 +164,35 @@ Each agent is a long-running autonomous process with its own inference loop, per
 
 ---
 
-## 4️⃣ Uniswap Trading API — Rebalance Quotes
+## 4️⃣ Uniswap Trading API — Quote + On-Chain Swap Execution
 
-When the swarm reaches **HIGH** or **CRITICAL** consensus, agent-0 calls the Uniswap Trading API (`POST /v1/quote`) to compute the optimal WETH → USDC swap:
+When the swarm reaches **HIGH** or **CRITICAL** consensus, agent-0 runs a two-step flow against the Uniswap Trading API:
+
+**Step 1 — Quote** (`POST /v1/quote`)
+
+Fetches the optimal WETH → USDC route on Ethereum mainnet as a reference price signal:
 
 ```text
-GET current ETH/USDC quote via Uniswap routing
-→ best route across v3 + v4 pools
-→ price impact, gas estimate, route string
-→ attached to consensus result → surfaced on dashboard
+→ best route across Uniswap v3 + v4 pools
+→ price, price impact, gas estimate, route string
+→ attached to consensus result → shown live on dashboard
 ```
 
-This closes the loop for the LP: the system detects rising IL, raises the pool fee to compensate, **and** tells the LP exactly what swap to execute to reduce their exposure — with the optimal route already calculated.
+**Step 2 — Execute** (`POST /v1/swap` → broadcast)
 
-The quote is shown inline in the Consensus Feed on the dashboard. A `FEEDBACK.md` at the repo root documents the full integration experience.
+Uses a second quote on Base mainnet, calls `/v1/swap` to get Universal Router calldata, then signs and broadcasts a real rebalance swap transaction via ethers.js:
+
+```text
+→ /v1/quote (Base, WETH → USDC, small amount)
+→ /v1/swap  → Universal Router calldata
+→ ethers wallet.sendTransaction → Base mainnet
+→ TX hash stored in consensus result
+→ Basescan link shown in dashboard Consensus Feed
+```
+
+This closes the full autonomous loop: detect IL risk → raise pool fee → **execute on-chain swap to rebalance the position** — no human intervention required.
+
+`FEEDBACK.md` at the repo root documents the complete integration experience including friction points and feature requests.
 
 ---
 
@@ -228,7 +243,7 @@ NeuralHook/
 │   └── src/
 │       ├── agent.ts            ← inference loop + AXL gossip + consensus
 │       ├── og-inference.ts     ← 0G Sealed Inference (TEE)
-│       ├── uniswap-api.ts      ← Uniswap Trading API rebalance quotes
+│       ├── uniswap-api.ts      ← Uniswap Trading API: /v1/quote + /v1/swap execution
 │       ├── il-calculator.ts    ← volatility / momentum / IL math
 │       ├── consensus.ts        ← 2-of-3 vote aggregation
 │       ├── keeperhub.ts        ← eth_call simulation + broadcast
@@ -250,12 +265,14 @@ NeuralHook/
 
 ## 🛠️ Running Locally
 
-> The contracts are **already deployed** on Unichain Sepolia — you do not need to redeploy to run the project. Just start the agents and frontend.
+> The contracts are **already deployed** on Unichain Sepolia — you do not need to redeploy. Just configure, fund, and start the agents.
 
 ### Prerequisites
 
 * Node.js 18+
 * A funded Unichain Sepolia wallet (get testnet ETH from the [Unichain faucet](https://faucet.unichain.org))
+* ~0.001 ETH on **Base mainnet** in the same wallet (for autonomous swap execution via Uniswap Trading API — covers ~10 swaps at ~$0.01 gas each)
+* A Uniswap API key from [hub.uniswap.org](https://hub.uniswap.org) (free, required for swap execution)
 * Git
 
 ### Step 1 — Clone
@@ -276,17 +293,25 @@ cp .env.example .env
 Edit `.env` and fill in:
 
 ```env
-PRIVATE_KEY=0x...           # wallet with Unichain Sepolia ETH (submits on-chain txs)
-ORACLE_PRIVATE_KEY=0x...    # oracle signer key (signs inference results)
+PRIVATE_KEY=0x...                # wallet that submits on-chain txs (needs Unichain Sepolia ETH + Base ETH)
+ORACLE_PRIVATE_KEY=0x...         # oracle signer key — can be same as PRIVATE_KEY for testing
 HOOK_ADDRESS=0x6DCb771F0A8A61F2679989453af9549C9ceA89c0
 FUND_ADDRESS=0x4D575ac6C3df76C7E22EB59715F0a9e839f16811
 RPC_URL=https://unichain-sepolia-rpc.publicnode.com
 CHAIN_ID=1301
+
+# Uniswap Trading API (required for swap execution)
+UNISWAP_API_KEY=your_key_here
+SWAP_CHAIN_ID=8453               # Base mainnet
+SWAP_RPC_URL=https://mainnet.base.org
+SWAP_AMOUNT_WEI=100000000000000  # 0.0001 ETH per rebalance swap
 ```
 
-> Both `PRIVATE_KEY` and `ORACLE_PRIVATE_KEY` can be the same wallet for local testing.
->
-> `UNISWAP_API_KEY` is optional — agents work without it but rebalance quotes will be skipped. Get a free key at [hub.uniswap.org](https://hub.uniswap.org).
+> To find your agent wallet address (for funding on Base):
+> ```bash
+> node -e "const {ethers}=require('ethers'); console.log(new ethers.Wallet(process.env.PRIVATE_KEY).address)"
+> ```
+> Send ~0.001 ETH to that address on Base mainnet. Covers ~10 autonomous swap executions.
 
 ### Step 3 — Start agents
 
@@ -294,14 +319,19 @@ CHAIN_ID=1301
 npm start
 ```
 
-This starts three agents on `:4000`, `:4001`, `:4002`. Each runs its own inference loop, gossips votes with the others, and agent-0 submits consensus results on-chain every ~30 seconds. On HIGH/CRITICAL consensus, agent-0 also fetches a Uniswap Trading API rebalance quote.
+This starts three agents on `:4000`, `:4001`, `:4002`. Each runs its own inference loop and gossips votes over Gensyn AXL. Every ~30 seconds, agent-0 submits consensus on-chain. On HIGH/CRITICAL consensus, agent-0 also:
+
+1. Fetches reference price via `POST /v1/quote` (Uniswap Trading API)
+2. Gets swap calldata via `POST /v1/swap`
+3. Broadcasts a WETH → USDC rebalance swap on Base mainnet
+4. Records the TX hash — visible in `/history` and the dashboard Consensus Feed
 
 Agent API endpoints (once running):
 
 | Endpoint | Description |
 |---|---|
 | `GET /status` | Agent health + stats |
-| `GET /history` | Consensus round history (includes rebalance quotes) |
+| `GET /history` | Consensus round history (includes swap TX hashes) |
 | `GET /audit-log` | Full on-chain submission log |
 | `POST /trigger-volatility` | Force a high-volatility inference round |
 
@@ -315,7 +345,7 @@ npm install
 npm run dev -- --port 3001
 ```
 
-Open **http://localhost:3001/dashboard** — the dashboard reads live agent data from `:4000/4001/4002` and live contract state from Unichain Sepolia automatically.
+Open **http://localhost:3001/dashboard** — the dashboard reads live agent data from `:4000/4001/4002` and live contract state from Unichain Sepolia. Swap executions appear as green `✓ Swap executed on-chain` links in the Consensus Feed with direct Basescan TX links.
 
 ---
 
@@ -347,8 +377,8 @@ Then update `HOOK_ADDRESS` and `FUND_ADDRESS` in `agents/.env` and `frontend/.en
 3. `og-inference.ts` calls 0G Sealed Inference (TEE) → gets signed IL risk result
 4. `axl-gossip.ts` gossips signed vote to peer agents via Gensyn AXL
 5. `consensus.ts` reaches 2-of-3 agreement on IL risk class
-6. If HIGH/CRITICAL: `uniswap-api.ts` fetches optimal rebalance quote from Uniswap Trading API
-7. `keeperhub.ts` simulates tx via `eth_call` → broadcasts if simulation passes
+6. If HIGH/CRITICAL: `uniswap-api.ts` calls `POST /v1/quote` (reference price) and `POST /v1/swap` (calldata) → broadcasts rebalance swap on Base mainnet
+7. `keeperhub.ts` simulates tx via `eth_call` → broadcasts `submitConsensusResult` on Unichain Sepolia
 8. `NeuralHook.sol` verifies ECDSA signature → updates `currentFee`
 9. Next swap uses the new fee automatically
 
@@ -366,30 +396,31 @@ Then update `HOOK_ADDRESS` and `FUND_ADDRESS` in `agents/.env` and `frontend/.en
 ### Agent Network Enforces
 
 * 2-of-3 consensus
-* `eth_call` simulation
+* `eth_call` simulation before every broadcast
 * Single submitter (agent-0 only)
 
 ### System Does NOT Do
 
 * No admin bypass
 * No governance delay
-* No mainnet deployment
+* No mainnet hook deployment
 
 ---
 
 ## 🧰 Tech Stack
 
-| Layer              | Technology                         |
-| ------------------ | ---------------------------------- |
-| Hook protocol      | Uniswap v4 (dynamic fee hook)      |
-| Swap quotes        | Uniswap Trading API (`/v1/quote`)  |
-| Smart contracts    | Solidity 0.8.26 + Foundry          |
-| AI inference       | 0G Sealed Inference (TEE)          |
-| Agent persistence  | 0G Storage                         |
-| Agent consensus    | Gensyn AXL (P2P gossip)            |
-| On-chain execution | KeeperHub MCP + ethers.js v6       |
-| L2 deployment      | Unichain Sepolia (chain 1301)      |
-| Frontend           | Next.js 14 + wagmi + viem          |
+| Layer                  | Technology                                       |
+| ---------------------- | ------------------------------------------------ |
+| Hook protocol          | Uniswap v4 (dynamic fee hook)                    |
+| Swap quotes + execution| Uniswap Trading API (`/v1/quote` + `/v1/swap`)   |
+| Smart contracts        | Solidity 0.8.26 + Foundry                        |
+| AI inference           | 0G Sealed Inference (TEE)                        |
+| Agent persistence      | 0G Storage                                       |
+| Agent consensus        | Gensyn AXL (P2P gossip)                          |
+| On-chain execution     | KeeperHub MCP + ethers.js v6                     |
+| Hook deployment        | Unichain Sepolia (chain 1301)                    |
+| Rebalance swaps        | Base mainnet (chain 8453)                        |
+| Frontend               | Next.js 14 + wagmi + viem                        |
 
 ---
 
@@ -401,17 +432,17 @@ Built for ETHGlobal Open Agents 2026. Every sponsor integration is load-bearing 
 
 | Sponsor | Track | NeuralHook Integration |
 | ------- | ----- | ---------------------- |
-| **0G** ·  | Best Autonomous Agents, Swarms & iNFT Innovations | 3 long-running goal-driven agents form a persistent swarm; each maintains its own inference loop, gossips signed votes, and shares a clear goal — protect LPs from IL. Agent state is persisted to **0G Storage**; inference runs through **0G Sealed Inference** (TEE). |
-| **Uniswap Foundation** · | Best Uniswap API Integration | On HIGH/CRITICAL consensus, agent-0 calls `POST /v1/quote` (Uniswap Trading API) to compute the optimal WETH → USDC rebalance swap with route, price impact, and gas estimate. Quote is attached to the consensus result and shown live on the dashboard. `FEEDBACK.md` documents the full integration experience. |
-| **Gensyn** ·  | Best Application of Agent eXchange Layer (AXL) | Three agents gossip their signed IL-risk votes peer-to-peer over Gensyn AXL. No central coordinator — each agent publishes its vote and receives peers' votes through AXL transport. Falls back to HTTP gossip gracefully if AXL is unreachable. |
+| **0G** · $7,500 | Best Autonomous Agents, Swarms & iNFT Innovations | 3 long-running goal-driven agents form a persistent swarm. Each maintains its own inference loop, gossips signed votes via AXL, and works toward a shared goal — protect LPs from IL. Agent state is persisted to **0G Storage**; every inference call goes through **0G Sealed Inference** (TEE-signed before leaving the model). |
+| **Uniswap Foundation** · $5,000 | Best Uniswap API Integration | On HIGH/CRITICAL consensus, agent-0 autonomously: (1) calls `POST /v1/quote` for optimal routing and reference price, (2) calls `POST /v1/swap` to get Universal Router calldata, (3) broadcasts a real WETH → USDC swap on Base mainnet — settling value on-chain without human input. TX hash is recorded in the consensus result and shown as a live Basescan link in the dashboard. `FEEDBACK.md` documents the full developer experience. |
+| **Gensyn** · $5,000 | Best Application of Agent eXchange Layer (AXL) | Three fully independent agents gossip their signed IL-risk votes P2P over Gensyn AXL — no central coordinator. Each agent publishes its vote and receives peers' votes exclusively through AXL transport. Falls back to HTTP gossip gracefully if AXL is unreachable. |
 
 ### Why the integrations are non-cosmetic
 
-**0G** — inference and storage are in the hot path. Every 30-second consensus round calls 0G Sealed Inference (or falls back to local heuristic if the TEE is unreachable) and writes the result to 0G Storage. The TEE signature is what prevents the AI from hallucinating a fee.
+**0G** — inference and storage are in the hot path of every 30-second round. The TEE signature from 0G Sealed Inference is the literal mechanism that prevents the AI from hallucinating a fee — without it, `ECDSA.recover` on the contract would revert every swap.
 
-**Uniswap Trading API** — the quote call runs inside the consensus loop, not as a side effect. The result is attached to the consensus payload that the frontend reads, so the LP sees both the new fee and the exact swap they should execute in the same update.
+**Uniswap Trading API** — both `/v1/quote` and `/v1/swap` run inside the consensus loop before the on-chain submission. The agent receives calldata from the API, signs it with a real wallet, and broadcasts a swap that settles on Base. The TX hash is verifiable on Basescan.
 
-**Gensyn AXL** — the gossip layer is what makes 2-of-3 consensus possible without a central server. Each agent is a genuinely independent process; AXL is the only channel through which they coordinate.
+**Gensyn AXL** — the gossip layer is what makes decentralised 2-of-3 consensus possible. Without it, agents would have no channel to coordinate and the threshold check in `consensus.ts` would never pass.
 
 ---
 
